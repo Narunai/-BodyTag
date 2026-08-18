@@ -15,26 +15,26 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 supabase_client = None
-_supabase_connected = False
+_supabase_ready = False
 
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        print(f"[BodyTag] Supabase client init warning: {e}")
+        print(f"[BodyTag] Supabase client init note: {e}")
 
 def check_supabase_ready():
     """Check if Supabase cloud tables are ready and accessible."""
-    global _supabase_connected, supabase_client
+    global _supabase_ready, supabase_client
     if not supabase_client:
         return False
     try:
         res = supabase_client.table("exercises").select("id").limit(1).execute()
-        _supabase_connected = True
+        _supabase_ready = True
         return True
     except Exception:
-        _supabase_connected = False
+        _supabase_ready = False
         return False
 
 def get_db():
@@ -48,7 +48,6 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Table: exercises
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS exercises (
         id TEXT PRIMARY KEY,
@@ -61,7 +60,6 @@ def init_db():
     )
     """)
 
-    # Table: workout_weeks
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS workout_weeks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +69,6 @@ def init_db():
     )
     """)
 
-    # Table: workout_days
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS workout_days (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +82,6 @@ def init_db():
     )
     """)
     
-    # Table: workout_logs
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS workout_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +98,6 @@ def init_db():
     )
     """)
     
-    # Check if day_id column exists in workout_logs (migration for existing db)
     cursor.execute("PRAGMA table_info(workout_logs)")
     columns = [col[1] for col in cursor.fetchall()]
     if "day_id" not in columns:
@@ -171,12 +166,44 @@ def init_db():
                         "secondary_muscles": json.dumps(ex["secondary"]),
                         "is_custom": 0
                     }).execute()
+                    
+            w_res = supabase_client.table("workout_weeks").select("id").limit(1).execute()
+            if not w_res.data:
+                w_ins = supabase_client.table("workout_weeks").insert({
+                    "week_number": 1,
+                    "title": "สัปดาห์ที่ 1"
+                }).execute()
+                if w_ins.data:
+                    w1_id = w_ins.data[0]["id"]
+                    supabase_client.table("workout_days").insert({
+                        "week_id": w1_id,
+                        "day_number": 1,
+                        "title": "วันที่ 1",
+                        "real_date": datetime.now().strftime("%Y-%m-%d"),
+                        "notes": "วันฝึกแรก"
+                    }).execute()
         except Exception as e:
-            print(f"[BodyTag] Supabase initial seed note: {e}")
+            print(f"[BodyTag] Supabase seed notice: {e}")
     else:
-        print("[BodyTag] 💾 Running on Local Database (SQLite). To sync with Supabase Cloud, run supabase_schema.sql in your Supabase SQL Editor.")
+        print("[BodyTag] 💾 Running on Local Database (SQLite). To activate Supabase Cloud, run the SQL policies in your Supabase SQL Editor.")
 
 def get_all_exercises():
+    if check_supabase_ready():
+        try:
+            res = supabase_client.table("exercises").select("*").order("category").order("name").execute()
+            if res.data:
+                return [{
+                    "id": r["id"],
+                    "name": r["name"],
+                    "name_th": r.get("name_th", ""),
+                    "category": r["category"],
+                    "primary": json.loads(r["primary_muscles"]) if isinstance(r["primary_muscles"], str) else r["primary_muscles"],
+                    "secondary": json.loads(r["secondary_muscles"]) if isinstance(r["secondary_muscles"], str) else r["secondary_muscles"],
+                    "is_custom": bool(r.get("is_custom", 0))
+                } for r in res.data]
+        except Exception as e:
+            print(f"[BodyTag] Supabase get_all_exercises fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM exercises ORDER BY category, name")
@@ -197,6 +224,20 @@ def get_all_exercises():
     return results
 
 def add_exercise(ex_dict):
+    if check_supabase_ready():
+        try:
+            supabase_client.table("exercises").insert({
+                "id": ex_dict["id"],
+                "name": ex_dict["name"],
+                "name_th": ex_dict.get("name_th", ex_dict["name"]),
+                "category": ex_dict.get("category", "Custom"),
+                "primary_muscles": json.dumps(ex_dict.get("primary", [])),
+                "secondary_muscles": json.dumps(ex_dict.get("secondary", [])),
+                "is_custom": 1
+            }).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase add_exercise fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -217,21 +258,107 @@ def add_exercise(ex_dict):
 # --- Week & Day Management ---
 
 def get_all_weeks_with_days():
-    """
-    Returns full hierarchy of weeks, their days, and muscle summaries for each day.
-    """
+    if check_supabase_ready():
+        try:
+            w_res = supabase_client.table("workout_weeks").select("*").order("week_number").execute()
+            d_res = supabase_client.table("workout_days").select("*").order("day_number").execute()
+            l_res = supabase_client.table("workout_logs").select("*, exercises(*)").execute()
+            
+            if w_res.data is not None:
+                logs_by_day = {}
+                for l in (l_res.data or []):
+                    d_id = l.get("day_id")
+                    if not d_id:
+                        continue
+                    if d_id not in logs_by_day:
+                        logs_by_day[d_id] = []
+                    ex = l.get("exercises") or {}
+                    pri = json.loads(ex.get("primary_muscles", "[]")) if isinstance(ex.get("primary_muscles"), str) else ex.get("primary_muscles", [])
+                    sec = json.loads(ex.get("secondary_muscles", "[]")) if isinstance(ex.get("secondary_muscles"), str) else ex.get("secondary_muscles", [])
+                    logs_by_day[d_id].append({
+                        "sets": l["sets"],
+                        "reps": l.get("reps", 10),
+                        "weight": l.get("weight", 0),
+                        "primary": pri,
+                        "secondary": sec,
+                        "ex_name": ex.get("name", ""),
+                        "ex_name_th": ex.get("name_th", "") or ex.get("name", "")
+                    })
+                
+                days_by_week = {}
+                for dr in (d_res.data or []):
+                    w_id = dr["week_id"]
+                    d_id = dr["id"]
+                    day_logs = logs_by_day.get(d_id, [])
+                    
+                    muscle_counts = {}
+                    day_sets = 0
+                    day_volume = 0.0
+                    
+                    for dl in day_logs:
+                        s = dl["sets"]
+                        day_sets += s
+                        day_volume += s * dl["reps"] * dl["weight"]
+                        for m in dl["primary"]:
+                            muscle_counts[m] = muscle_counts.get(m, 0) + s
+                        for m in dl["secondary"]:
+                            muscle_counts[m] = muscle_counts.get(m, 0) + (s * 0.5)
+                            
+                    muscles_trained = []
+                    for m_key, count in sorted(muscle_counts.items(), key=lambda x: x[1], reverse=True):
+                        meta = MUSCLE_METADATA.get(m_key, {})
+                        muscles_trained.append({
+                            "key": m_key,
+                            "name_th": meta.get("name_th", m_key),
+                            "name_en": meta.get("name_en", m_key),
+                            "sets": round(count, 1)
+                        })
+                        
+                    day_item = {
+                        "id": d_id,
+                        "week_id": w_id,
+                        "day_number": dr["day_number"],
+                        "title": dr["title"],
+                        "real_date": dr.get("real_date") or "",
+                        "notes": dr.get("notes") or "",
+                        "created_at": dr.get("created_at", ""),
+                        "total_sets": day_sets,
+                        "total_volume_kg": round(day_volume, 1),
+                        "exercises_count": len(day_logs),
+                        "muscles_trained": muscles_trained
+                    }
+                    if w_id not in days_by_week:
+                        days_by_week[w_id] = []
+                    days_by_week[w_id].append(day_item)
+                    
+                weeks = []
+                for wr in w_res.data:
+                    w_id = wr["id"]
+                    days = days_by_week.get(w_id, [])
+                    week_sets = sum(d["total_sets"] for d in days)
+                    week_volume = sum(d["total_volume_kg"] for d in days)
+                    weeks.append({
+                        "id": w_id,
+                        "week_number": wr["week_number"],
+                        "title": wr["title"],
+                        "created_at": wr.get("created_at", ""),
+                        "total_days": len(days),
+                        "total_sets": week_sets,
+                        "total_volume_kg": round(week_volume, 1),
+                        "days": days
+                    })
+                return weeks
+        except Exception as e:
+            print(f"[BodyTag] Supabase get_all_weeks_with_days fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
-    # 1. Fetch weeks
     cursor.execute("SELECT * FROM workout_weeks ORDER BY week_number ASC, id ASC")
     week_rows = cursor.fetchall()
     
-    # 2. Fetch days
     cursor.execute("SELECT * FROM workout_days ORDER BY week_id ASC, day_number ASC, id ASC")
     day_rows = cursor.fetchall()
     
-    # 3. Fetch all logs with exercises to compute day & week stats
     cursor.execute("""
     SELECT l.id, l.day_id, l.sets, l.reps, l.weight, l.logged_at,
            e.primary_muscles, e.secondary_muscles, e.name as ex_name, e.name_th as ex_name_th
@@ -241,7 +368,6 @@ def get_all_weeks_with_days():
     log_rows = cursor.fetchall()
     conn.close()
     
-    # Organize logs by day_id
     logs_by_day = {}
     for lr in log_rows:
         d_id = lr["day_id"]
@@ -257,14 +383,12 @@ def get_all_weeks_with_days():
             "ex_name_th": lr["ex_name_th"] or lr["ex_name"]
         })
         
-    # Build days mapping by week_id
     days_by_week = {}
     for dr in day_rows:
         w_id = dr["week_id"]
         d_id = dr["id"]
         day_logs = logs_by_day.get(d_id, [])
         
-        # Calculate muscles trained in this day
         muscle_counts = {}
         day_sets = 0
         day_volume = 0.0
@@ -279,7 +403,6 @@ def get_all_weeks_with_days():
             for m in dl["secondary"]:
                 muscle_counts[m] = muscle_counts.get(m, 0) + (s * 0.5)
                 
-        # Format muscle summary tags for this day
         muscles_trained = []
         for m_key, count in sorted(muscle_counts.items(), key=lambda x: x[1], reverse=True):
             meta = MUSCLE_METADATA.get(m_key, {})
@@ -308,7 +431,6 @@ def get_all_weeks_with_days():
             days_by_week[w_id] = []
         days_by_week[w_id].append(day_item)
         
-    # Assemble weeks
     weeks = []
     for wr in week_rows:
         w_id = wr["id"]
@@ -330,9 +452,30 @@ def get_all_weeks_with_days():
     return weeks
 
 def add_week(title=None):
+    if check_supabase_ready():
+        try:
+            w_res = supabase_client.table("workout_weeks").select("week_number").order("week_number", desc=True).limit(1).execute()
+            next_num = (w_res.data[0]["week_number"] + 1) if w_res.data else 1
+            week_title = title.strip() if title and title.strip() else f"สัปดาห์ที่ {next_num}"
+            ins = supabase_client.table("workout_weeks").insert({
+                "week_number": next_num,
+                "title": week_title
+            }).execute()
+            if ins.data:
+                new_w_id = ins.data[0]["id"]
+                supabase_client.table("workout_days").insert({
+                    "week_id": new_w_id,
+                    "day_number": 1,
+                    "title": "วันที่ 1",
+                    "real_date": datetime.now().strftime("%Y-%m-%d"),
+                    "notes": ""
+                }).execute()
+                return {"id": new_w_id, "week_number": next_num, "title": week_title}
+        except Exception as e:
+            print(f"[BodyTag] Supabase add_week fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
     cursor.execute("SELECT COALESCE(MAX(week_number), 0) + 1 FROM workout_weeks")
     next_num = cursor.fetchone()[0]
     
@@ -343,7 +486,6 @@ def add_week(title=None):
     """, (next_num, week_title))
     new_week_id = cursor.lastrowid
     
-    # Automatically create Day 1 for convenience
     today_str = datetime.now().strftime("%Y-%m-%d")
     cursor.execute("""
     INSERT INTO workout_days (week_id, day_number, title, real_date, notes)
@@ -355,9 +497,14 @@ def add_week(title=None):
     return {"id": new_week_id, "week_number": next_num, "title": week_title}
 
 def delete_week(week_id):
+    if check_supabase_ready():
+        try:
+            supabase_client.table("workout_weeks").delete().eq("id", week_id).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase delete_week note: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    # Delete logs under days in this week
     cursor.execute("""
     DELETE FROM workout_logs WHERE day_id IN (
         SELECT id FROM workout_days WHERE week_id = ?
@@ -370,15 +517,30 @@ def delete_week(week_id):
     return True
 
 def add_day(week_id, title=None, real_date=None, notes=""):
+    date_val = real_date if real_date else datetime.now().strftime("%Y-%m-%d")
+    if check_supabase_ready():
+        try:
+            d_res = supabase_client.table("workout_days").select("day_number").eq("week_id", week_id).order("day_number", desc=True).limit(1).execute()
+            next_num = (d_res.data[0]["day_number"] + 1) if d_res.data else 1
+            day_title = title.strip() if title and title.strip() else f"วันที่ {next_num}"
+            ins = supabase_client.table("workout_days").insert({
+                "week_id": week_id,
+                "day_number": next_num,
+                "title": day_title,
+                "real_date": date_val,
+                "notes": notes or ""
+            }).execute()
+            if ins.data:
+                return ins.data[0]
+        except Exception as e:
+            print(f"[BodyTag] Supabase add_day fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
     cursor.execute("SELECT COALESCE(MAX(day_number), 0) + 1 FROM workout_days WHERE week_id = ?", (week_id,))
     next_num = cursor.fetchone()[0]
     
     day_title = title.strip() if title and title.strip() else f"วันที่ {next_num}"
-    date_val = real_date if real_date else datetime.now().strftime("%Y-%m-%d")
-    
     cursor.execute("""
     INSERT INTO workout_days (week_id, day_number, title, real_date, notes)
     VALUES (?, ?, ?, ?, ?)
@@ -397,9 +559,19 @@ def add_day(week_id, title=None, real_date=None, notes=""):
     }
 
 def update_day(day_id, title=None, real_date=None, notes=None):
+    if check_supabase_ready():
+        try:
+            payload = {}
+            if title is not None: payload["title"] = title
+            if real_date is not None: payload["real_date"] = real_date
+            if notes is not None: payload["notes"] = notes
+            if payload:
+                supabase_client.table("workout_days").update(payload).eq("id", day_id).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase update_day fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
     updates = []
     params = []
     if title is not None:
@@ -416,11 +588,16 @@ def update_day(day_id, title=None, real_date=None, notes=None):
         params.append(day_id)
         cursor.execute(f"UPDATE workout_days SET {', '.join(updates)} WHERE id = ?", params)
         conn.commit()
-        
     conn.close()
     return True
 
 def delete_day(day_id):
+    if check_supabase_ready():
+        try:
+            supabase_client.table("workout_days").delete().eq("id", day_id).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase delete_day fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM workout_logs WHERE day_id = ?", (day_id,))
@@ -432,9 +609,51 @@ def delete_day(day_id):
 # --- Logs Operations ---
 
 def get_logs(week_id=None, day_id=None, limit=200):
+    if check_supabase_ready():
+        try:
+            query = supabase_client.table("workout_logs").select("*, exercises(*), workout_days(*, workout_weeks(*))")
+            if day_id is not None:
+                query = query.eq("day_id", day_id)
+            elif week_id is not None:
+                query = query.eq("workout_days.week_id", week_id)
+            res = query.order("logged_at", desc=True).limit(limit).execute()
+            if res.data is not None:
+                results = []
+                for r in res.data:
+                    ex = r.get("exercises") or {}
+                    d = r.get("workout_days") or {}
+                    w = d.get("workout_weeks") or {}
+                    if week_id is not None and d.get("week_id") != week_id:
+                        continue
+                    pri = json.loads(ex.get("primary_muscles", "[]")) if isinstance(ex.get("primary_muscles"), str) else ex.get("primary_muscles", [])
+                    sec = json.loads(ex.get("secondary_muscles", "[]")) if isinstance(ex.get("secondary_muscles"), str) else ex.get("secondary_muscles", [])
+                    results.append({
+                        "id": r["id"],
+                        "day_id": r.get("day_id"),
+                        "week_id": d.get("week_id"),
+                        "day_title": d.get("title") or "ไม่ระบุวัน",
+                        "day_real_date": d.get("real_date") or "",
+                        "week_title": w.get("title") or "",
+                        "week_number": w.get("week_number"),
+                        "exercise_id": r["exercise_id"],
+                        "exercise_name": ex.get("name", ""),
+                        "exercise_name_th": ex.get("name_th", "") or ex.get("name", ""),
+                        "category": ex.get("category", "General"),
+                        "sets": r["sets"],
+                        "reps": r.get("reps", 10),
+                        "weight": r.get("weight", 0),
+                        "rpe": r.get("rpe", 8.0),
+                        "notes": r.get("notes", ""),
+                        "logged_at": r.get("logged_at", ""),
+                        "primary": pri,
+                        "secondary": sec
+                    })
+                return results
+        except Exception as e:
+            print(f"[BodyTag] Supabase get_logs fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
     query = """
     SELECT l.id, l.day_id, l.exercise_id, l.sets, l.reps, l.weight, l.rpe, l.notes, l.logged_at,
            e.name as exercise_name, e.name_th as exercise_name_th, e.category,
@@ -447,7 +666,6 @@ def get_logs(week_id=None, day_id=None, limit=200):
     LEFT JOIN workout_weeks w ON d.week_id = w.id
     """
     params = []
-    
     if day_id is not None:
         query += " WHERE l.day_id = ?"
         params.append(day_id)
@@ -488,24 +706,39 @@ def get_logs(week_id=None, day_id=None, limit=200):
     return results
 
 def add_log(exercise_id, sets, reps=10, weight=0.0, rpe=8.0, notes="", custom_time=None, day_id=None):
+    logged_time = custom_time if custom_time else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    
+    if check_supabase_ready():
+        try:
+            ins = supabase_client.table("workout_logs").insert({
+                "day_id": day_id,
+                "exercise_id": exercise_id,
+                "sets": sets,
+                "reps": reps,
+                "weight": weight,
+                "rpe": rpe,
+                "notes": notes or "",
+                "logged_at": logged_time
+            }).execute()
+            if ins.data:
+                return ins.data[0]["id"]
+        except Exception as e:
+            print(f"[BodyTag] Supabase add_log fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
-    
-    # If no day_id provided, pick the latest active day
     if not day_id:
         cursor.execute("SELECT id FROM workout_days ORDER BY id DESC LIMIT 1")
         row = cursor.fetchone()
         if row:
             day_id = row[0]
         else:
-            # Create a week and day if totally missing
             cursor.execute("INSERT INTO workout_weeks (week_number, title) VALUES (1, 'สัปดาห์ที่ 1')")
             w_id = cursor.lastrowid
             cursor.execute("INSERT INTO workout_days (week_id, day_number, title, real_date) VALUES (?, 1, 'วันที่ 1', ?)",
                            (w_id, datetime.now().strftime("%Y-%m-%d")))
             day_id = cursor.lastrowid
             
-    logged_time = custom_time if custom_time else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("""
     INSERT INTO workout_logs (day_id, exercise_id, sets, reps, weight, rpe, notes, logged_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -517,6 +750,12 @@ def add_log(exercise_id, sets, reps=10, weight=0.0, rpe=8.0, notes="", custom_ti
     return log_id
 
 def delete_log(log_id):
+    if check_supabase_ready():
+        try:
+            supabase_client.table("workout_logs").delete().eq("id", log_id).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase delete_log fallback: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM workout_logs WHERE id = ?", (log_id,))
@@ -525,6 +764,15 @@ def delete_log(log_id):
     return True
 
 def reset_logs(week_id=None, day_id=None):
+    if check_supabase_ready():
+        try:
+            if day_id is not None:
+                supabase_client.table("workout_logs").delete().eq("day_id", day_id).execute()
+            else:
+                supabase_client.table("workout_logs").delete().neq("id", 0).execute()
+        except Exception as e:
+            print(f"[BodyTag] Supabase reset_logs note: {e}")
+
     conn = get_db()
     cursor = conn.cursor()
     if day_id is not None:
@@ -544,14 +792,9 @@ def reset_logs(week_id=None, day_id=None):
 # --- Statistics & Heatmap Calculation ---
 
 def calculate_stats(week_id=None, day_id=None):
-    """
-    Computes aggregated muscle volume, recovery decay, and hypertrophy landmarks
-    isolated to the requested week_id or day_id scope.
-    """
     logs = get_logs(week_id=week_id, day_id=day_id, limit=1000)
     now = datetime.now(timezone.utc)
     
-    # Initialize muscle stats mapping
     muscle_stats = {}
     for muscle_key, meta in MUSCLE_METADATA.items():
         muscle_stats[muscle_key] = {
@@ -570,14 +813,12 @@ def calculate_stats(week_id=None, day_id=None):
             "hours_since_workout": None,
             "recovery_percent": 100,
             "recent_exercises": [],
-            "heatmap_level": 0,       # 0: None, 1: 1-3, 2: 4-7, 3: 8-12, 4: 13+
+            "heatmap_level": 0,
             "volume_status": "Resting",
             "volume_status_th": "ยังไม่ได้เล่น"
         }
     
-    # Aggregate logs in scope
     for log in logs:
-        # Parse timestamp
         try:
             log_dt = datetime.fromisoformat(log["logged_at"].replace("Z", "+00:00"))
             if log_dt.tzinfo is None:
@@ -592,7 +833,6 @@ def calculate_stats(week_id=None, day_id=None):
         weight = log["weight"]
         ex_name = log["exercise_name_th"] or log["exercise_name"]
         
-        # Primary muscles get 1.0 weight
         for m in log["primary"]:
             if m in muscle_stats:
                 st = muscle_stats[m]
@@ -607,7 +847,6 @@ def calculate_stats(week_id=None, day_id=None):
                 if ex_name not in st["recent_exercises"]:
                     st["recent_exercises"].append(ex_name)
                     
-        # Secondary muscles get 0.5 weight
         for m in log["secondary"]:
             if m in muscle_stats:
                 st = muscle_stats[m]
@@ -622,29 +861,26 @@ def calculate_stats(week_id=None, day_id=None):
                 if f"{ex_name} (มัดรอง)" not in st["recent_exercises"]:
                     st["recent_exercises"].append(f"{ex_name} (มัดรอง)")
 
-    # Post-process recovery and heatmap levels
     for m, st in muscle_stats.items():
-        st.pop("last_workout_dt", None) # Clean up non-serializable datetime
+        st.pop("last_workout_dt", None)
         eff_vol = st["effective_volume"]
         
-        # Heatmap Frequency Level
         if eff_vol <= 0:
             st["heatmap_level"] = 0
-            st["heatmap_color"] = "#334155" # slate-700
+            st["heatmap_color"] = "#334155"
         elif eff_vol <= 3:
             st["heatmap_level"] = 1
-            st["heatmap_color"] = "#22c55e" # emerald-500
+            st["heatmap_color"] = "#22c55e"
         elif eff_vol <= 7:
             st["heatmap_level"] = 2
-            st["heatmap_color"] = "#f59e0b" # amber-500
+            st["heatmap_color"] = "#f59e0b"
         elif eff_vol <= 12:
             st["heatmap_level"] = 3
-            st["heatmap_color"] = "#f97316" # orange-500
+            st["heatmap_color"] = "#f97316"
         else:
             st["heatmap_level"] = 4
-            st["heatmap_color"] = "#ef4444" # red-500
+            st["heatmap_color"] = "#ef4444"
             
-        # Recovery calculation
         if st["hours_since_workout"] is not None and eff_vol > 0:
             full_recovery_hours = min(96.0, 36.0 + eff_vol * 3.0)
             hours_passed = st["hours_since_workout"]
@@ -657,7 +893,6 @@ def calculate_stats(week_id=None, day_id=None):
             st["recovery_hours_total"] = 0
             st["hours_remaining"] = 0
             
-        # Volume Status (Hypertrophy Landmarks)
         if eff_vol == 0:
             st["volume_status"] = "Resting"
             st["volume_status_th"] = "ยังไม่ได้เล่น"
