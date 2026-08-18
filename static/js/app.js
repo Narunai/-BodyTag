@@ -221,6 +221,18 @@ async function dbGetExercises() {
 
     if (supabaseClient) {
         try {
+            // Seed INITIAL_EXERCISES into Supabase if not yet present
+            const seedPayload = INITIAL_EXERCISES.map(ex => ({
+                id: ex.id,
+                name: ex.name,
+                name_th: ex.name_th || ex.name,
+                category: ex.category || 'General',
+                primary_muscles: JSON.stringify(ex.primary || []),
+                secondary_muscles: JSON.stringify(ex.secondary || []),
+                is_custom: 0
+            }));
+            await supabaseClient.from('exercises').upsert(seedPayload, { onConflict: 'id', ignoreDuplicates: true });
+
             const { data, error } = await supabaseClient.from('exercises').select('*').order('category').order('name');
             if (!error && data && data.length > 0) {
                 const cloudCustom = data.filter(r => r.is_custom).map(r => ({
@@ -626,8 +638,48 @@ async function dbAddLog(logData) {
 
     if (supabaseClient) {
         try {
-            await supabaseClient.from('workout_logs').insert({
-                day_id: logData.day_id,
+            // 1. Ensure exercise exists in Supabase (prevents 409 FK violation)
+            if (ex && ex.id) {
+                await supabaseClient.from('exercises').upsert({
+                    id: ex.id,
+                    name: ex.name || ex.id,
+                    name_th: ex.name_th || ex.name || ex.id,
+                    category: ex.category || 'General',
+                    primary_muscles: JSON.stringify(ex.primary || []),
+                    secondary_muscles: JSON.stringify(ex.secondary || []),
+                    is_custom: ex.is_custom ? 1 : 0
+                }, { onConflict: 'id', ignoreDuplicates: true });
+            }
+
+            // 2. Ensure week and day exist in Supabase (prevents 409 FK violation)
+            let validDayId = logData.day_id;
+            if (validDayId) {
+                const localDays = getLS(LS_KEYS.DAYS, []);
+                const currentDay = localDays.find(d => d.id === validDayId);
+                if (currentDay) {
+                    const localWeeks = getLS(LS_KEYS.WEEKS, []);
+                    const currentWeek = localWeeks.find(w => w.id === currentDay.week_id);
+                    if (currentWeek) {
+                        await supabaseClient.from('workout_weeks').upsert({
+                            id: currentWeek.id,
+                            week_number: currentWeek.week_number || 1,
+                            title: currentWeek.title || 'สัปดาห์ที่ 1'
+                        }, { onConflict: 'id', ignoreDuplicates: true });
+                    }
+
+                    await supabaseClient.from('workout_days').upsert({
+                        id: currentDay.id,
+                        week_id: currentDay.week_id,
+                        day_number: currentDay.day_number || 1,
+                        title: currentDay.title || 'วันที่ 1',
+                        real_date: currentDay.real_date || '',
+                        notes: currentDay.notes || ''
+                    }, { onConflict: 'id', ignoreDuplicates: true });
+                }
+            }
+
+            const { data: insData, error: insError } = await supabaseClient.from('workout_logs').insert({
+                day_id: validDayId,
                 exercise_id: logData.exercise_id,
                 sets: logData.sets,
                 reps: logData.reps,
@@ -635,7 +687,14 @@ async function dbAddLog(logData) {
                 rpe: logData.rpe,
                 notes: logData.notes || '',
                 logged_at: newLog.logged_at
-            });
+            }).select();
+
+            if (insError) {
+                console.warn('Supabase add log warning:', insError);
+            } else if (insData && insData[0] && insData[0].id) {
+                newLog.id = insData[0].id;
+                setLS(LS_KEYS.LOGS, localLogs);
+            }
         } catch (e) {
             console.warn('Supabase add log note:', e);
         }
