@@ -1,13 +1,13 @@
 /**
  * BodyTag - Muscle Tracker & Anatomy Heatmap Frontend App
- * Supports GitHub Pages, Passcode Authentication ('narunai141214'), Supabase Cloud DB, and Weekly/Daily Scopes
+ * Supports GitHub Pages, Passcode Authentication ('narunai141214'), Supabase Cloud DB + LocalStorage Dual-Sync, and Weekly/Daily Scopes
  */
 
 const AUTH_PASSCODE = 'narunai141214';
 const SUPABASE_URL = 'https://vyajillnaxlbkzkbbznq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_NoVKvs7RVPjP3sqLyNDsGw_15pineww';
 
-// Initialize Supabase JS Client safely using unique variable name
+// Initialize Supabase JS Client safely
 let supabaseClient = null;
 if (window.supabase && typeof window.supabase.createClient === 'function') {
     try {
@@ -72,6 +72,13 @@ const MUSCLE_METADATA = {
     "hamstrings": { name_en: "Hamstrings", name_th: "กล้ามเนื้อต้นขาด้านหลัง", view: "posterior", mev: 6, mav: 12, mrv: 18 },
     "calves": { name_en: "Calves", name_th: "กล้ามเนื้อน่อง", view: "both", mev: 6, mav: 12, mrv: 20 },
     "tibialis": { name_en: "Tibialis", name_th: "กล้ามเนื้อหน้าแข้ง", view: "anterior", mev: 2, mav: 6, mrv: 10 }
+};
+
+const LS_KEYS = {
+    WEEKS: 'bodytag_weeks_v2',
+    DAYS: 'bodytag_days_v2',
+    LOGS: 'bodytag_logs_v2',
+    CUSTOM_EXERCISES: 'bodytag_custom_exercises_v2'
 };
 
 const AppState = {
@@ -188,35 +195,63 @@ async function initializeApp() {
 }
 window.initializeApp = initializeApp;
 
-// --- Data Operations (Supabase Cloud + Local Fallback) ---
+// --- LocalStorage Helpers ---
+
+function getLS(key, fallback) {
+    try {
+        const val = localStorage.getItem(key);
+        return val ? JSON.parse(val) : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function setLS(key, val) {
+    try {
+        localStorage.setItem(key, JSON.stringify(val));
+    } catch (_) {}
+}
+
+// --- Data Operations (Supabase Cloud + LocalStorage Dual-Sync) ---
 
 async function dbGetExercises() {
+    let customEx = getLS(LS_KEYS.CUSTOM_EXERCISES, []);
+
     if (supabaseClient) {
         try {
             const { data, error } = await supabaseClient.from('exercises').select('*').order('category').order('name');
             if (!error && data && data.length > 0) {
-                return data.map(r => ({
+                const cloudCustom = data.filter(r => r.is_custom).map(r => ({
                     id: r.id,
                     name: r.name,
                     name_th: r.name_th || r.name,
                     category: r.category,
                     primary: typeof r.primary_muscles === 'string' ? JSON.parse(r.primary_muscles) : r.primary_muscles,
                     secondary: typeof r.secondary_muscles === 'string' ? JSON.parse(r.secondary_muscles) : r.secondary_muscles,
-                    is_custom: Boolean(r.is_custom)
+                    is_custom: true
                 }));
+                if (cloudCustom.length > 0) {
+                    customEx = cloudCustom;
+                    setLS(LS_KEYS.CUSTOM_EXERCISES, customEx);
+                }
             }
         } catch (e) {
-            console.warn('Supabase get exercises fallback:', e);
+            console.warn('Supabase get exercises note:', e);
         }
     }
-    try {
-        const res = await fetch('/api/exercises');
-        if (res.ok) return await res.json();
-    } catch (_) {}
-    return INITIAL_EXERCISES;
+
+    const all = [...INITIAL_EXERCISES];
+    customEx.forEach(ce => {
+        if (!all.some(e => e.id === ce.id)) all.push(ce);
+    });
+    return all;
 }
 
 async function dbAddExercise(exDict) {
+    const customEx = getLS(LS_KEYS.CUSTOM_EXERCISES, []);
+    customEx.push(exDict);
+    setLS(LS_KEYS.CUSTOM_EXERCISES, customEx);
+
     if (supabaseClient) {
         try {
             await supabaseClient.from('exercises').insert({
@@ -232,17 +267,32 @@ async function dbAddExercise(exDict) {
             console.warn('Supabase add exercise note:', e);
         }
     }
-    try {
-        await fetch('/api/exercises', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(exDict)
-        });
-    } catch (_) {}
     return exDict;
 }
 
 async function dbGetWeeksWithDays() {
+    let localWeeks = getLS(LS_KEYS.WEEKS, null);
+    let localDays = getLS(LS_KEYS.DAYS, null);
+    let localLogs = getLS(LS_KEYS.LOGS, []);
+
+    // Initial default seed if fresh
+    if (!localWeeks || localWeeks.length === 0) {
+        localWeeks = [{ id: 1, week_number: 1, title: "สัปดาห์ที่ 1", created_at: new Date().toISOString() }];
+        setLS(LS_KEYS.WEEKS, localWeeks);
+    }
+    if (!localDays || localDays.length === 0) {
+        localDays = [{
+            id: 1,
+            week_id: 1,
+            day_number: 1,
+            title: "วันที่ 1",
+            real_date: new Date().toISOString().split('T')[0],
+            notes: "วันฝึกแรก",
+            created_at: new Date().toISOString()
+        }];
+        setLS(LS_KEYS.DAYS, localDays);
+    }
+
     if (supabaseClient) {
         try {
             const [wRes, dRes, lRes] = await Promise.all([
@@ -252,260 +302,19 @@ async function dbGetWeeksWithDays() {
             ]);
 
             if (!wRes.error && wRes.data && wRes.data.length > 0) {
-                const logsByDay = {};
-                (lRes.data || []).forEach(l => {
-                    const dayId = l.day_id;
-                    if (!dayId) return;
-                    if (!logsByDay[dayId]) logsByDay[dayId] = [];
-                    const ex = l.exercises || {};
-                    const pri = typeof ex.primary_muscles === 'string' ? JSON.parse(ex.primary_muscles || '[]') : (ex.primary_muscles || []);
-                    const sec = typeof ex.secondary_muscles === 'string' ? JSON.parse(ex.secondary_muscles || '[]') : (ex.secondary_muscles || []);
-                    logsByDay[dayId].push({
-                        sets: l.sets,
-                        reps: l.reps || 10,
-                        weight: l.weight || 0,
-                        primary: pri,
-                        secondary: sec,
-                        ex_name: ex.name || '',
-                        ex_name_th: ex.name_th || ex.name || ''
-                    });
-                });
-
-                const daysByWeek = {};
-                (dRes.data || []).forEach(dr => {
-                    const wId = dr.week_id;
-                    const dId = dr.id;
-                    const dayLogs = logsByDay[dId] || [];
-
-                    const muscleCounts = {};
-                    let daySets = 0;
-                    let dayVolume = 0.0;
-
-                    dayLogs.forEach(dl => {
-                        const s = dl.sets;
-                        daySets += s;
-                        dayVolume += s * dl.reps * dl.weight;
-                        dl.primary.forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + s; });
-                        dl.secondary.forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + (s * 0.5); });
-                    });
-
-                    const musclesTrained = Object.entries(muscleCounts)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([mKey, count]) => {
-                            const meta = MUSCLE_METADATA[mKey] || {};
-                            return {
-                                key: mKey,
-                                name_th: meta.name_th || mKey,
-                                name_en: meta.name_en || mKey,
-                                sets: Math.round(count * 10) / 10
-                            };
-                        });
-
-                    if (!daysByWeek[wId]) daysByWeek[wId] = [];
-                    daysByWeek[wId].push({
-                        id: dId,
-                        week_id: wId,
-                        day_number: dr.day_number,
-                        title: dr.title,
-                        real_date: dr.real_date || '',
-                        notes: dr.notes || '',
-                        created_at: dr.created_at || '',
-                        total_sets: daySets,
-                        total_volume_kg: Math.round(dayVolume * 10) / 10,
-                        exercises_count: dayLogs.length,
-                        muscles_trained: musclesTrained
-                    });
-                });
-
-                return wRes.data.map(wr => {
-                    const days = daysByWeek[wr.id] || [];
-                    const weekSets = days.reduce((sum, d) => sum + d.total_sets, 0);
-                    const weekVolume = days.reduce((sum, d) => sum + d.total_volume_kg, 0);
-                    return {
-                        id: wr.id,
-                        week_number: wr.week_number,
-                        title: wr.title,
-                        created_at: wr.created_at || '',
-                        total_days: days.length,
-                        total_sets: weekSets,
-                        total_volume_kg: Math.round(weekVolume * 10) / 10,
-                        days: days
-                    };
-                });
+                localWeeks = wRes.data;
+                setLS(LS_KEYS.WEEKS, localWeeks);
             }
-        } catch (e) {
-            console.warn('Supabase get weeks fallback:', e);
-        }
-    }
-
-    try {
-        const res = await fetch('/api/weeks');
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.length > 0) return data;
-        }
-    } catch (_) {}
-
-    // Default initial interactive template
-    const today = new Date().toISOString().split('T')[0];
-    return [
-        {
-            id: 1,
-            week_number: 1,
-            title: "สัปดาห์ที่ 1",
-            created_at: new Date().toISOString(),
-            total_days: 1,
-            total_sets: 0,
-            total_volume_kg: 0,
-            days: [
-                {
-                    id: 1,
-                    week_id: 1,
-                    day_number: 1,
-                    title: "วันที่ 1",
-                    real_date: today,
-                    notes: "วันฝึกแรก",
-                    created_at: new Date().toISOString(),
-                    total_sets: 0,
-                    total_volume_kg: 0,
-                    exercises_count: 0,
-                    muscles_trained: []
-                }
-            ]
-        }
-    ];
-}
-
-async function dbAddWeek(title) {
-    if (supabaseClient) {
-        try {
-            const { data: latest } = await supabaseClient.from('workout_weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
-            const nextNum = (latest && latest[0]) ? latest[0].week_number + 1 : 1;
-            const weekTitle = title && title.trim() ? title.trim() : `สัปดาห์ที่ ${nextNum}`;
-            const { data: newW } = await supabaseClient.from('workout_weeks').insert({ week_number: nextNum, title: weekTitle }).select();
-            if (newW && newW.length > 0) {
-                await supabaseClient.from('workout_days').insert({
-                    week_id: newW[0].id,
-                    day_number: 1,
-                    title: 'วันที่ 1',
-                    real_date: new Date().toISOString().split('T')[0],
-                    notes: ''
-                });
-                return newW[0];
+            if (!dRes.error && dRes.data && dRes.data.length > 0) {
+                localDays = dRes.data;
+                setLS(LS_KEYS.DAYS, localDays);
             }
-        } catch (e) {
-            console.warn('Supabase add week note:', e);
-        }
-    }
-    try {
-        const res = await fetch('/api/weeks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title })
-        });
-        if (res.ok) return await res.json();
-    } catch (_) {}
-}
-
-async function dbDeleteWeek(weekId) {
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('workout_weeks').delete().eq('id', weekId);
-        } catch (e) {
-            console.warn('Supabase delete week note:', e);
-        }
-    }
-    try {
-        await fetch(`/api/weeks/${weekId}`, { method: 'DELETE' });
-    } catch (_) {}
-}
-
-async function dbAddDay(weekId, title, realDate, notes) {
-    const dateVal = realDate || new Date().toISOString().split('T')[0];
-    if (supabaseClient) {
-        try {
-            const { data: latest } = await supabaseClient.from('workout_days').select('day_number').eq('week_id', weekId).order('day_number', { ascending: false }).limit(1);
-            const nextNum = (latest && latest[0]) ? latest[0].day_number + 1 : 1;
-            const dayTitle = title && title.trim() ? title.trim() : `วันที่ ${nextNum}`;
-            const { data: newD } = await supabaseClient.from('workout_days').insert({
-                week_id: weekId,
-                day_number: nextNum,
-                title: dayTitle,
-                real_date: dateVal,
-                notes: notes || ''
-            }).select();
-            if (newD && newD.length > 0) return newD[0];
-        } catch (e) {
-            console.warn('Supabase add day note:', e);
-        }
-    }
-    try {
-        const res = await fetch('/api/days', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ week_id: weekId, title, real_date: dateVal, notes })
-        });
-        if (res.ok) return await res.json();
-    } catch (_) {}
-}
-
-async function dbUpdateDay(dayId, title, realDate, notes) {
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('workout_days').update({ title, real_date: realDate, notes }).eq('id', dayId);
-        } catch (e) {
-            console.warn('Supabase update day note:', e);
-        }
-    }
-    try {
-        await fetch(`/api/days/${dayId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, real_date: realDate, notes })
-        });
-    } catch (_) {}
-}
-
-async function dbDeleteDay(dayId) {
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('workout_days').delete().eq('id', dayId);
-        } catch (e) {
-            console.warn('Supabase delete day note:', e);
-        }
-    }
-    try {
-        await fetch(`/api/days/${dayId}`, { method: 'DELETE' });
-    } catch (_) {}
-}
-
-async function dbGetLogs(weekId, dayId) {
-    if (supabaseClient) {
-        try {
-            let query = supabaseClient.from('workout_logs').select('*, exercises(*), workout_days(*, workout_weeks(*))');
-            if (dayId !== null && dayId !== undefined) {
-                query = query.eq('day_id', dayId);
-            }
-            const { data, error } = await query.order('logged_at', { ascending: false }).limit(200);
-            if (!error && data) {
-                const results = [];
-                data.forEach(r => {
+            if (!lRes.error && lRes.data) {
+                localLogs = lRes.data.map(r => {
                     const ex = r.exercises || {};
-                    const d = r.workout_days || {};
-                    const w = d.workout_weeks || {};
-                    if (weekId !== null && weekId !== undefined && d.week_id !== weekId) return;
-
-                    const pri = typeof ex.primary_muscles === 'string' ? JSON.parse(ex.primary_muscles || '[]') : (ex.primary_muscles || []);
-                    const sec = typeof ex.secondary_muscles === 'string' ? JSON.parse(ex.secondary_muscles || '[]') : (ex.secondary_muscles || []);
-
-                    results.push({
+                    return {
                         id: r.id,
                         day_id: r.day_id,
-                        week_id: d.week_id,
-                        day_title: d.title || 'ไม่ระบุวัน',
-                        day_real_date: d.real_date || '',
-                        week_title: w.title || '',
-                        week_number: w.week_number,
                         exercise_id: r.exercise_id,
                         exercise_name: ex.name || '',
                         exercise_name_th: ex.name_th || ex.name || '',
@@ -516,31 +325,306 @@ async function dbGetLogs(weekId, dayId) {
                         rpe: r.rpe || 8.0,
                         notes: r.notes || '',
                         logged_at: r.logged_at || '',
-                        primary: pri,
-                        secondary: sec
-                    });
+                        primary: typeof ex.primary_muscles === 'string' ? JSON.parse(ex.primary_muscles || '[]') : (ex.primary_muscles || []),
+                        secondary: typeof ex.secondary_muscles === 'string' ? JSON.parse(ex.secondary_muscles || '[]') : (ex.secondary_muscles || [])
+                    };
                 });
-                return results;
+                setLS(LS_KEYS.LOGS, localLogs);
             }
         } catch (e) {
-            console.warn('Supabase get logs fallback:', e);
+            console.warn('Supabase get weeks note:', e);
         }
     }
 
-    try {
-        const weekParam = weekId ? `week_id=${weekId}` : '';
-        const dayParam = dayId ? `day_id=${dayId}` : '';
-        const query = [weekParam, dayParam].filter(Boolean).join('&');
-        const res = await fetch(`/api/logs${query ? '?' + query : ''}`);
-        if (res.ok) return await res.json();
-    } catch (_) {}
-    return [];
+    // Build hierarchy
+    const logsByDay = {};
+    localLogs.forEach(l => {
+        const dId = l.day_id;
+        if (!dId) return;
+        if (!logsByDay[dId]) logsByDay[dId] = [];
+        logsByDay[dId].push(l);
+    });
+
+    const daysByWeek = {};
+    localDays.forEach(dr => {
+        const wId = dr.week_id;
+        const dId = dr.id;
+        const dayLogs = logsByDay[dId] || [];
+
+        const muscleCounts = {};
+        let daySets = 0;
+        let dayVolume = 0.0;
+
+        dayLogs.forEach(dl => {
+            const s = dl.sets || 0;
+            daySets += s;
+            dayVolume += s * (dl.reps || 0) * (dl.weight || 0);
+            (dl.primary || []).forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + s; });
+            (dl.secondary || []).forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + (s * 0.5); });
+        });
+
+        const musclesTrained = Object.entries(muscleCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([mKey, count]) => {
+                const meta = MUSCLE_METADATA[mKey] || {};
+                return {
+                    key: mKey,
+                    name_th: meta.name_th || mKey,
+                    name_en: meta.name_en || mKey,
+                    sets: Math.round(count * 10) / 10
+                };
+            });
+
+        if (!daysByWeek[wId]) daysByWeek[wId] = [];
+        daysByWeek[wId].push({
+            id: dId,
+            week_id: wId,
+            day_number: dr.day_number || 1,
+            title: dr.title || `วันที่ ${dr.day_number || 1}`,
+            real_date: dr.real_date || '',
+            notes: dr.notes || '',
+            created_at: dr.created_at || '',
+            total_sets: daySets,
+            total_volume_kg: Math.round(dayVolume * 10) / 10,
+            exercises_count: dayLogs.length,
+            muscles_trained: musclesTrained
+        });
+    });
+
+    return localWeeks.map(wr => {
+        const days = daysByWeek[wr.id] || [];
+        const weekSets = days.reduce((sum, d) => sum + d.total_sets, 0);
+        const weekVolume = days.reduce((sum, d) => sum + d.total_volume_kg, 0);
+        return {
+            id: wr.id,
+            week_number: wr.week_number || 1,
+            title: wr.title || `สัปดาห์ที่ ${wr.week_number || 1}`,
+            created_at: wr.created_at || '',
+            total_days: days.length,
+            total_sets: weekSets,
+            total_volume_kg: Math.round(weekVolume * 10) / 10,
+            days: days
+        };
+    });
+}
+
+async function dbAddWeek(title) {
+    const localWeeks = getLS(LS_KEYS.WEEKS, []);
+    const localDays = getLS(LS_KEYS.DAYS, []);
+
+    let maxWeekNum = 0;
+    let maxId = 0;
+    localWeeks.forEach(w => {
+        if (w.week_number > maxWeekNum) maxWeekNum = w.week_number;
+        if (w.id > maxId) maxId = w.id;
+    });
+
+    const nextNum = maxWeekNum + 1;
+    const newWeekId = maxId + 1;
+    const weekTitle = title && title.trim() ? title.trim() : `สัปดาห์ที่ ${nextNum}`;
+
+    const newWeek = {
+        id: newWeekId,
+        week_number: nextNum,
+        title: weekTitle,
+        created_at: new Date().toISOString()
+    };
+    localWeeks.push(newWeek);
+    setLS(LS_KEYS.WEEKS, localWeeks);
+
+    // Auto-create Day 1 for the new week
+    let maxDayId = 0;
+    localDays.forEach(d => { if (d.id > maxDayId) maxDayId = d.id; });
+    const newDay = {
+        id: maxDayId + 1,
+        week_id: newWeekId,
+        day_number: 1,
+        title: 'วันที่ 1',
+        real_date: new Date().toISOString().split('T')[0],
+        notes: '',
+        created_at: new Date().toISOString()
+    };
+    localDays.push(newDay);
+    setLS(LS_KEYS.DAYS, localDays);
+
+    if (supabaseClient) {
+        try {
+            const { data: cloudW } = await supabaseClient.from('workout_weeks').insert({ week_number: nextNum, title: weekTitle }).select();
+            if (cloudW && cloudW.length > 0) {
+                await supabaseClient.from('workout_days').insert({
+                    week_id: cloudW[0].id,
+                    day_number: 1,
+                    title: 'วันที่ 1',
+                    real_date: new Date().toISOString().split('T')[0],
+                    notes: ''
+                });
+            }
+        } catch (e) {
+            console.warn('Supabase add week note:', e);
+        }
+    }
+    return newWeek;
+}
+
+async function dbDeleteWeek(weekId) {
+    let localWeeks = getLS(LS_KEYS.WEEKS, []);
+    let localDays = getLS(LS_KEYS.DAYS, []);
+    let localLogs = getLS(LS_KEYS.LOGS, []);
+
+    const deletedDayIds = localDays.filter(d => d.week_id === weekId).map(d => d.id);
+    localWeeks = localWeeks.filter(w => w.id !== weekId);
+    localDays = localDays.filter(d => d.week_id !== weekId);
+    localLogs = localLogs.filter(l => !deletedDayIds.includes(l.day_id));
+
+    setLS(LS_KEYS.WEEKS, localWeeks);
+    setLS(LS_KEYS.DAYS, localDays);
+    setLS(LS_KEYS.LOGS, localLogs);
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('workout_weeks').delete().eq('id', weekId);
+        } catch (e) {
+            console.warn('Supabase delete week note:', e);
+        }
+    }
+}
+
+async function dbAddDay(weekId, title, realDate, notes) {
+    const localDays = getLS(LS_KEYS.DAYS, []);
+    const weekDays = localDays.filter(d => d.week_id === weekId);
+
+    let maxDayNum = 0;
+    let maxId = 0;
+    localDays.forEach(d => { if (d.id > maxId) maxId = d.id; });
+    weekDays.forEach(d => { if (d.day_number > maxDayNum) maxDayNum = d.day_number; });
+
+    const nextNum = maxDayNum + 1;
+    const dateVal = realDate || new Date().toISOString().split('T')[0];
+    const dayTitle = title && title.trim() ? title.trim() : `วันที่ ${nextNum}`;
+
+    const newDay = {
+        id: maxId + 1,
+        week_id: weekId,
+        day_number: nextNum,
+        title: dayTitle,
+        real_date: dateVal,
+        notes: notes || '',
+        created_at: new Date().toISOString()
+    };
+    localDays.push(newDay);
+    setLS(LS_KEYS.DAYS, localDays);
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('workout_days').insert({
+                week_id: weekId,
+                day_number: nextNum,
+                title: dayTitle,
+                real_date: dateVal,
+                notes: notes || ''
+            });
+        } catch (e) {
+            console.warn('Supabase add day note:', e);
+        }
+    }
+    return newDay;
+}
+
+async function dbUpdateDay(dayId, title, realDate, notes) {
+    const localDays = getLS(LS_KEYS.DAYS, []);
+    const target = localDays.find(d => d.id === dayId);
+    if (target) {
+        if (title) target.title = title;
+        if (realDate) target.real_date = realDate;
+        if (notes !== undefined) target.notes = notes;
+        setLS(LS_KEYS.DAYS, localDays);
+    }
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('workout_days').update({ title, real_date: realDate, notes }).eq('id', dayId);
+        } catch (e) {
+            console.warn('Supabase update day note:', e);
+        }
+    }
+}
+
+async function dbDeleteDay(dayId) {
+    let localDays = getLS(LS_KEYS.DAYS, []);
+    let localLogs = getLS(LS_KEYS.LOGS, []);
+
+    localDays = localDays.filter(d => d.id !== dayId);
+    localLogs = localLogs.filter(l => l.day_id !== dayId);
+
+    setLS(LS_KEYS.DAYS, localDays);
+    setLS(LS_KEYS.LOGS, localLogs);
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('workout_days').delete().eq('id', dayId);
+        } catch (e) {
+            console.warn('Supabase delete day note:', e);
+        }
+    }
+}
+
+async function dbGetLogs(weekId, dayId) {
+    const localWeeks = getLS(LS_KEYS.WEEKS, []);
+    const localDays = getLS(LS_KEYS.DAYS, []);
+    const localLogs = getLS(LS_KEYS.LOGS, []);
+
+    let filtered = localLogs;
+    if (dayId !== null && dayId !== undefined) {
+        filtered = filtered.filter(l => l.day_id === dayId);
+    } else if (weekId !== null && weekId !== undefined) {
+        const weekDayIds = localDays.filter(d => d.week_id === weekId).map(d => d.id);
+        filtered = filtered.filter(l => weekDayIds.includes(l.day_id));
+    }
+
+    return filtered.map(l => {
+        const day = localDays.find(d => d.id === l.day_id) || {};
+        const week = localWeeks.find(w => w.id === day.week_id) || {};
+        return {
+            ...l,
+            day_title: day.title || 'วันฝึก',
+            day_real_date: day.real_date || '',
+            week_title: week.title || '',
+            week_number: week.week_number || 1
+        };
+    }).sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
 }
 
 async function dbAddLog(logData) {
+    const localLogs = getLS(LS_KEYS.LOGS, []);
+    let maxId = 0;
+    localLogs.forEach(l => { if (l.id > maxId) maxId = l.id; });
+
+    const allExercises = await dbGetExercises();
+    const ex = allExercises.find(e => e.id === logData.exercise_id) || {};
+
+    const newLog = {
+        id: maxId + 1,
+        day_id: logData.day_id,
+        exercise_id: logData.exercise_id,
+        exercise_name: ex.name || '',
+        exercise_name_th: ex.name_th || ex.name || '',
+        category: ex.category || 'General',
+        sets: logData.sets,
+        reps: logData.reps,
+        weight: logData.weight,
+        rpe: logData.rpe,
+        notes: logData.notes || '',
+        logged_at: new Date().toISOString(),
+        primary: ex.primary || [],
+        secondary: ex.secondary || []
+    };
+
+    localLogs.unshift(newLog);
+    setLS(LS_KEYS.LOGS, localLogs);
+
     if (supabaseClient) {
         try {
-            const { data, error } = await supabaseClient.from('workout_logs').insert({
+            await supabaseClient.from('workout_logs').insert({
                 day_id: logData.day_id,
                 exercise_id: logData.exercise_id,
                 sets: logData.sets,
@@ -548,24 +632,20 @@ async function dbAddLog(logData) {
                 weight: logData.weight,
                 rpe: logData.rpe,
                 notes: logData.notes || '',
-                logged_at: new Date().toISOString()
-            }).select();
-            if (!error && data) return data[0];
+                logged_at: newLog.logged_at
+            });
         } catch (e) {
             console.warn('Supabase add log note:', e);
         }
     }
-    try {
-        const res = await fetch('/api/logs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(logData)
-        });
-        if (res.ok) return await res.json();
-    } catch (_) {}
+    return newLog;
 }
 
 async function dbDeleteLog(logId) {
+    let localLogs = getLS(LS_KEYS.LOGS, []);
+    localLogs = localLogs.filter(l => l.id !== logId);
+    setLS(LS_KEYS.LOGS, localLogs);
+
     if (supabaseClient) {
         try {
             await supabaseClient.from('workout_logs').delete().eq('id', logId);
@@ -573,29 +653,6 @@ async function dbDeleteLog(logId) {
             console.warn('Supabase delete log note:', e);
         }
     }
-    try {
-        await fetch(`/api/logs/${logId}`, { method: 'DELETE' });
-    } catch (_) {}
-}
-
-async function dbResetLogs(weekId, dayId) {
-    if (supabaseClient) {
-        try {
-            if (dayId !== null && dayId !== undefined) {
-                await supabaseClient.from('workout_logs').delete().eq('day_id', dayId);
-            } else {
-                await supabaseClient.from('workout_logs').delete().neq('id', 0);
-            }
-        } catch (e) {
-            console.warn('Supabase reset logs note:', e);
-        }
-    }
-    try {
-        const weekParam = weekId ? `week_id=${weekId}` : '';
-        const dayParam = dayId ? `day_id=${dayId}` : '';
-        const query = [weekParam, dayParam].filter(Boolean).join('&');
-        await fetch(`/api/logs/reset${query ? '?' + query : ''}`, { method: 'POST' });
-    } catch (_) {}
 }
 
 // Client-Side Calculation for Statistics, Volume Landmarks & Recovery
@@ -761,27 +818,6 @@ async function loadWeeksAndInit() {
         AppState.weeks = await dbGetWeeksWithDays();
 
         if (AppState.weeks && AppState.weeks.length > 0) {
-            // Ensure each week has at least Day 1
-            AppState.weeks.forEach(w => {
-                if (!w.days || w.days.length === 0) {
-                    w.days = [
-                        {
-                            id: (w.id * 10) + 1,
-                            week_id: w.id,
-                            day_number: 1,
-                            title: "วันที่ 1",
-                            real_date: new Date().toISOString().split('T')[0],
-                            notes: "",
-                            total_sets: 0,
-                            total_volume_kg: 0,
-                            exercises_count: 0,
-                            muscles_trained: []
-                        }
-                    ];
-                    w.total_days = 1;
-                }
-            });
-
             if (!AppState.selectedWeekId || !AppState.weeks.some(w => w.id === AppState.selectedWeekId)) {
                 AppState.selectedWeekId = AppState.weeks[0].id;
             }
@@ -944,9 +980,9 @@ function renderWeeklySidebar() {
 
     if (allWeekBtn) {
         if (AppState.selectedDayId === null) {
-            allWeekBtn.className = 'py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5 ring-2 ring-sky-300/40';
+            allWeekBtn.className = 'py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5 ring-2 ring-sky-300/40 cursor-pointer';
         } else {
-            allWeekBtn.className = 'py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-center flex items-center justify-center gap-1.5';
+            allWeekBtn.className = 'py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-center flex items-center justify-center gap-1.5 cursor-pointer';
         }
     }
 
@@ -1079,22 +1115,6 @@ function initViewControls() {
             AppState.colorMode = e.target.value;
             updateMuscleColors();
             updateLegendDisplay();
-        });
-    }
-
-    const resetBtn = document.getElementById('btn-reset-logs');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', async () => {
-            const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-            const scopeName = AppState.selectedDayId 
-                ? 'วันฝึกนี้' 
-                : (currentWeek ? currentWeek.title : 'ทั้งหมด');
-
-            if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลการฝึกของ "${scopeName}" ทั้งหมด?`)) {
-                await dbResetLogs(AppState.selectedWeekId, AppState.selectedDayId);
-                showToast(`ล้างข้อมูล ${scopeName} สำเร็จ`);
-                await loadWeeksAndInit();
-            }
         });
     }
 }
@@ -1439,7 +1459,7 @@ function renderBodyModel() {
     const container = document.getElementById('anatomy-container');
     if (!container) return;
 
-    const svgProvider = window.BodyAnatomySVG || window.BodySVG;
+    const svgProvider = window.BodySVG || window.BodyAnatomySVG;
     if (!svgProvider) {
         container.innerHTML = `<div class="p-8 text-center text-slate-500">กำลังโหลด Anatomy SVG...</div>`;
         return;

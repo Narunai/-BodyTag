@@ -207,6 +207,8 @@ const BodySVG = {
                 <path id="back-right-calf" data-muscle="calves" class="muscle-part cursor-pointer transition-all duration-200"
                     d="M204 470 C212 495 212 530 206 555 C200 562 186 562 180 555 C176 530 176 495 182 470 C190 466 196 466 204 470 Z" />
             </g>
+        </svg>
+        `;
     }
 };
 
