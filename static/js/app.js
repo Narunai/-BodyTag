@@ -1124,9 +1124,17 @@ function initViewControls() {
 // --- Form & Logging Operations ---
 
 function initFormControls() {
-    const form = document.getElementById('workout-logger-form');
+    const form = document.getElementById('workout-log-form') || document.getElementById('workout-logger-form');
     const exerciseSelect = document.getElementById('exercise-select');
+    const categorySelect = document.getElementById('category-filter');
     const categoryTabs = document.querySelectorAll('[data-category]');
+
+    if (categorySelect) {
+        categorySelect.addEventListener('change', (e) => {
+            AppState.selectedCategory = e.target.value;
+            renderExerciseSelect();
+        });
+    }
 
     categoryTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -1149,10 +1157,10 @@ function initFormControls() {
         });
     }
 
-    document.querySelectorAll('[data-quick-set]').forEach(btn => {
+    document.querySelectorAll('[data-quick-sets], [data-quick-set]').forEach(btn => {
         btn.addEventListener('click', () => {
             const input = document.getElementById('input-sets');
-            if (input) input.value = btn.dataset.quickSet;
+            if (input) input.value = btn.dataset.quickSets || btn.dataset.quickSet;
         });
     });
 
@@ -1171,8 +1179,8 @@ function initFormControls() {
             const reps = parseInt(document.getElementById('input-reps').value) || 10;
             const weight = parseFloat(document.getElementById('input-weight').value) || 0;
             const rpe = parseFloat(document.getElementById('input-rpe').value) || 8.0;
-            const notes = document.getElementById('input-notes').value.trim();
-            const dayId = AppState.logTargetDayId || AppState.selectedDayId;
+            const targetSelect = document.getElementById('log-target-day-select');
+            const dayId = (targetSelect && targetSelect.value) ? parseInt(targetSelect.value) : (AppState.logTargetDayId || AppState.selectedDayId);
 
             if (!exerciseId) {
                 showToast('กรุณาเลือกท่าออกกำลังกาย', 'error');
@@ -1186,12 +1194,10 @@ function initFormControls() {
                     reps,
                     weight,
                     rpe,
-                    notes,
                     day_id: dayId
                 });
 
                 showToast(`บันทึกสำเร็จ: ${sets} เซ็ต (${weight} kg) 🎉`);
-                document.getElementById('input-notes').value = '';
                 await loadWeeksAndInit();
             } catch (err) {
                 console.error('Failed to add log:', err);
@@ -1239,7 +1245,7 @@ function renderExerciseSelect() {
 }
 
 function updateTargetMusclesPreview() {
-    const container = document.getElementById('target-muscles-preview');
+    const container = document.getElementById('exercise-muscle-preview') || document.getElementById('target-muscles-preview');
     if (!container) return;
 
     const ex = AppState.exercises.find(e => e.id === AppState.selectedExerciseId);
@@ -1684,7 +1690,7 @@ function renderSummaryStats() {
 }
 
 function renderMuscleCards() {
-    const container = document.getElementById('muscle-cards-grid');
+    const container = document.getElementById('muscle-cards-container') || document.getElementById('muscle-cards-grid');
     if (!container) return;
 
     const muscles = Object.values(AppState.stats.muscles || {});
@@ -1746,11 +1752,16 @@ function selectMuscle(muscleKey) {
 }
 
 function renderLogsHistory() {
-    const container = document.getElementById('logs-history-tbody');
-    const emptyState = document.getElementById('logs-empty-state');
+    const container = document.getElementById('workout-logs-tbody') || document.getElementById('logs-history-tbody');
+    const emptyState = document.getElementById('workout-logs-empty') || document.getElementById('logs-empty-state');
+    const totalLogsBadge = document.getElementById('stat-total-logs');
     if (!container) return;
 
     const logs = AppState.logs || [];
+    if (totalLogsBadge) {
+        totalLogsBadge.textContent = `${logs.length} รายการ`;
+    }
+
     if (logs.length === 0) {
         container.innerHTML = '';
         if (emptyState) emptyState.classList.remove('hidden');
@@ -1768,22 +1779,22 @@ function renderLogsHistory() {
 
         return `
             <tr class="border-b border-slate-800/60 hover:bg-slate-800/30 transition text-xs">
-                <td class="py-2.5 px-3 font-mono text-slate-400">${timeStr}</td>
-                <td class="py-2.5 px-3">
+                <td class="py-2.5 px-4 font-mono text-slate-400">${timeStr}</td>
+                <td class="py-2.5 px-4">
                     <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 font-mono text-[10px]">
                         ${l.day_title || 'วันฝึก'}
                     </span>
                 </td>
-                <td class="py-2.5 px-3">
+                <td class="py-2.5 px-4">
                     <div class="font-semibold text-slate-200">${l.exercise_name_th || l.exercise_name}</div>
                     <div class="text-[10px] text-slate-500 font-mono">${l.category}</div>
                 </td>
-                <td class="py-2.5 px-3 font-mono text-slate-300 font-bold">${l.sets}</td>
-                <td class="py-2.5 px-3 font-mono text-slate-300">${l.reps}</td>
-                <td class="py-2.5 px-3 font-mono text-sky-400 font-semibold">${l.weight} kg</td>
-                <td class="py-2.5 px-3 font-mono text-amber-400">${l.rpe}</td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="deleteWorkoutLog(${l.id})" class="p-1 rounded text-rose-400 hover:bg-rose-500/10 transition">
+                <td class="py-2.5 px-4 text-center font-mono text-slate-300 font-bold">${l.sets}</td>
+                <td class="py-2.5 px-4 text-center font-mono text-slate-300">${l.reps}</td>
+                <td class="py-2.5 px-4 text-center font-mono text-sky-400 font-semibold">${l.weight} kg</td>
+                <td class="py-2.5 px-4 text-center font-mono text-amber-400">${l.rpe}</td>
+                <td class="py-2.5 px-4 text-right">
+                    <button onclick="deleteWorkoutLog(${l.id})" class="p-1 rounded text-rose-400 hover:bg-rose-500/10 transition cursor-pointer" title="ลบรายการนี้">
                         🗑️
                     </button>
                 </td>
