@@ -1456,7 +1456,7 @@ function renderMuscleCheckboxes() {
 // --- Body Model & SVG Heatmap Rendering ---
 
 function renderBodyModel() {
-    const container = document.getElementById('anatomy-container');
+    const container = document.getElementById('body-model-container') || document.getElementById('anatomy-container');
     if (!container) return;
 
     const svgProvider = window.BodySVG || window.BodyAnatomySVG;
@@ -1473,24 +1473,24 @@ function renderBodyModel() {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full h-full items-center">
                 <div class="flex flex-col items-center">
                     <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
-                    <div class="w-full max-w-[280px]">${getFront()}</div>
+                    <div class="w-full max-w-[240px]">${getFront()}</div>
                 </div>
                 <div class="flex flex-col items-center">
                     <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
-                    <div class="w-full max-w-[280px]">${getBack()}</div>
+                    <div class="w-full max-w-[240px]">${getBack()}</div>
                 </div>
             </div>
         `;
     } else if (AppState.currentView === 'posterior') {
         container.innerHTML = `
-            <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
+            <div class="flex flex-col items-center w-full max-w-[320px] mx-auto">
                 <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
                 ${getBack()}
             </div>
         `;
     } else {
         container.innerHTML = `
-            <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
+            <div class="flex flex-col items-center w-full max-w-[320px] mx-auto">
                 <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
                 ${getFront()}
             </div>
@@ -1536,7 +1536,8 @@ function attachMuscleInteractions() {
                 ` : ''}
             `;
 
-            tooltip.classList.remove('hidden');
+            tooltip.classList.remove('opacity-0', 'hidden');
+            tooltip.classList.add('opacity-100');
             positionTooltip(e, tooltip);
         });
 
@@ -1545,7 +1546,10 @@ function attachMuscleInteractions() {
         });
 
         el.addEventListener('mouseleave', () => {
-            if (tooltip) tooltip.classList.add('hidden');
+            if (tooltip) {
+                tooltip.classList.remove('opacity-100');
+                tooltip.classList.add('opacity-0');
+            }
         });
 
         el.addEventListener('click', () => {
@@ -1606,35 +1610,37 @@ function updateMuscleColors() {
 }
 
 function updateLegendDisplay() {
-    const titleEl = document.getElementById('legend-title');
-    const container = document.getElementById('legend-items-container');
-    if (!container) return;
+    const legendEl = document.getElementById('model-legend') || document.getElementById('legend-items-container');
+    if (!legendEl) return;
 
     if (AppState.colorMode === 'recovery') {
-        if (titleEl) titleEl.textContent = 'คำอธิบายระดับการฟื้นตัว (Muscle Recovery Decay):';
-        container.innerHTML = `
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981]"></span><span>100% พร้อมเต็มที่</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e]"></span><span>70-99% ฟื้นเกือบสมบูรณ์</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>40-69% กำลังฟื้นฟู</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>&lt;40% ล้าสะสมสูง</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155]"></span><span>ยังไม่ได้บริหาร</span></div>
+        legendEl.innerHTML = `
+            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981] inline-block"></span> 100% พร้อม</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e] inline-block"></span> 70-99% เกือบเต็ม</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b] inline-block"></span> 40-69% กำลังฟื้น</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444] inline-block"></span> &lt;40% ล้าสูง</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155] inline-block"></span> ยังไม่ได้เล่น</div>
+            </div>
         `;
     } else if (AppState.colorMode === 'landmarks') {
-        if (titleEl) titleEl.textContent = 'คำอธิบายเกณฑ์ Hypertrophy Landmarks (MEV / MAV / MRV):';
-        container.innerHTML = `
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#3b82f6]"></span><span>&lt; MEV คงสภาพ</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981]"></span><span>MEV-MAV โตสูงสุด</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>MAV-MRV ปริมาณสูง</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>&gt; MRV เกินขีดจำกัด</span></div>
+        legendEl.innerHTML = `
+            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#3b82f6] inline-block"></span> &lt; MEV คงสภาพ</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981] inline-block"></span> MEV-MAV โตดีสุด</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b] inline-block"></span> MAV-MRV ปริมาณสูง</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444] inline-block"></span> &gt; MRV เกินลิมิต</div>
+            </div>
         `;
     } else {
-        if (titleEl) titleEl.textContent = 'คำอธิบายความถี่ / ปริมาณเซ็ต (Heatmap Volume):';
-        container.innerHTML = `
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155]"></span><span>0 เซ็ต</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e]"></span><span>1-3 เซ็ต</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>4-7 เซ็ต</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f97316]"></span><span>8-12 เซ็ต</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>13+ เซ็ต</span></div>
+        legendEl.innerHTML = `
+            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155] inline-block"></span> 0 เซ็ต</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e] inline-block"></span> 1-3 เซ็ต</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b] inline-block"></span> 4-7 เซ็ต</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f97316] inline-block"></span> 8-12 เซ็ต</div>
+                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444] inline-block"></span> 13+ เซ็ต</div>
+            </div>
         `;
     }
 }
