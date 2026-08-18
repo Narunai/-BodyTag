@@ -7,11 +7,11 @@ const AUTH_PASSCODE = 'narunai141214';
 const SUPABASE_URL = 'https://vyajillnaxlbkzkbbznq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_NoVKvs7RVPjP3sqLyNDsGw_15pineww';
 
-// Initialize Supabase JS Client if loaded
-let supabase = null;
+// Initialize Supabase JS Client safely using unique variable name
+let supabaseClient = null;
 if (window.supabase && typeof window.supabase.createClient === 'function') {
     try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     } catch (e) {
         console.warn('Supabase client initialization note:', e);
     }
@@ -117,7 +117,7 @@ function initAuth() {
 
     function unlockGate() {
         if (authGate) {
-            authGate.style.display = 'none';
+            authGate.style.setProperty('display', 'none', 'important');
             authGate.classList.add('hidden');
             authGate.classList.remove('flex');
         }
@@ -133,7 +133,7 @@ function initAuth() {
         }
         if (authError) authError.classList.add('hidden');
         if (authGate) {
-            authGate.style.display = 'flex';
+            authGate.style.setProperty('display', 'flex', 'important');
             authGate.classList.remove('hidden');
             authGate.classList.add('flex');
         }
@@ -146,20 +146,24 @@ function initAuth() {
         lockGate();
     }
 
+    window.handleAuthSubmit = function() {
+        const val = (authPasscode ? authPasscode.value : '').trim().toLowerCase();
+        if (val === AUTH_PASSCODE.toLowerCase()) {
+            localStorage.setItem('bodytag_auth_token', AUTH_PASSCODE);
+            unlockGate();
+        } else {
+            if (authError) authError.classList.remove('hidden');
+            if (authPasscode) {
+                authPasscode.classList.add('animate-shake');
+                setTimeout(() => authPasscode.classList.remove('animate-shake'), 400);
+            }
+        }
+    };
+
     if (authForm) {
         authForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const val = (authPasscode ? authPasscode.value : '').trim().toLowerCase();
-            if (val === AUTH_PASSCODE.toLowerCase()) {
-                localStorage.setItem('bodytag_auth_token', AUTH_PASSCODE);
-                unlockGate();
-            } else {
-                if (authError) authError.classList.remove('hidden');
-                if (authPasscode) {
-                    authPasscode.classList.add('animate-shake');
-                    setTimeout(() => authPasscode.classList.remove('animate-shake'), 400);
-                }
-            }
+            window.handleAuthSubmit();
         });
     }
 
@@ -187,9 +191,9 @@ window.initializeApp = initializeApp;
 // --- Data Operations (Supabase Cloud + Local Fallback) ---
 
 async function dbGetExercises() {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data, error } = await supabase.from('exercises').select('*').order('category').order('name');
+            const { data, error } = await supabaseClient.from('exercises').select('*').order('category').order('name');
             if (!error && data && data.length > 0) {
                 return data.map(r => ({
                     id: r.id,
@@ -205,7 +209,6 @@ async function dbGetExercises() {
             console.warn('Supabase get exercises fallback:', e);
         }
     }
-    // Fallback to local server API or built-in list
     try {
         const res = await fetch('/api/exercises');
         if (res.ok) return await res.json();
@@ -214,9 +217,9 @@ async function dbGetExercises() {
 }
 
 async function dbAddExercise(exDict) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.from('exercises').insert({
+            await supabaseClient.from('exercises').insert({
                 id: exDict.id,
                 name: exDict.name,
                 name_th: exDict.name_th || exDict.name,
@@ -240,30 +243,15 @@ async function dbAddExercise(exDict) {
 }
 
 async function dbGetWeeksWithDays() {
-    if (supabase) {
+    if (supabaseClient) {
         try {
             const [wRes, dRes, lRes] = await Promise.all([
-                supabase.from('workout_weeks').select('*').order('week_number', { ascending: true }),
-                supabase.from('workout_days').select('*').order('day_number', { ascending: true }),
-                supabase.from('workout_logs').select('*, exercises(*)')
+                supabaseClient.from('workout_weeks').select('*').order('week_number', { ascending: true }),
+                supabaseClient.from('workout_days').select('*').order('day_number', { ascending: true }),
+                supabaseClient.from('workout_logs').select('*, exercises(*)')
             ]);
 
-            if (!wRes.error && wRes.data) {
-                // If weeks is empty on cloud, auto create Week 1 and Day 1
-                if (wRes.data.length === 0) {
-                    const { data: newW } = await supabase.from('workout_weeks').insert({ week_number: 1, title: 'สัปดาห์ที่ 1' }).select();
-                    if (newW && newW.length > 0) {
-                        await supabase.from('workout_days').insert({
-                            week_id: newW[0].id,
-                            day_number: 1,
-                            title: 'วันที่ 1',
-                            real_date: new Date().toISOString().split('T')[0],
-                            notes: 'วันฝึกแรก'
-                        });
-                        return await dbGetWeeksWithDays();
-                    }
-                }
-
+            if (!wRes.error && wRes.data && wRes.data.length > 0) {
                 const logsByDay = {};
                 (lRes.data || []).forEach(l => {
                     const dayId = l.day_id;
@@ -350,7 +338,16 @@ async function dbGetWeeksWithDays() {
         }
     }
 
-    // Default initial template so UI is always interactive
+    try {
+        const res = await fetch('/api/weeks');
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.length > 0) return data;
+        }
+    } catch (_) {}
+
+    // Default initial interactive template
+    const today = new Date().toISOString().split('T')[0];
     return [
         {
             id: 1,
@@ -366,7 +363,7 @@ async function dbGetWeeksWithDays() {
                     week_id: 1,
                     day_number: 1,
                     title: "วันที่ 1",
-                    real_date: new Date().toISOString().split('T')[0],
+                    real_date: today,
                     notes: "วันฝึกแรก",
                     created_at: new Date().toISOString(),
                     total_sets: 0,
@@ -380,14 +377,14 @@ async function dbGetWeeksWithDays() {
 }
 
 async function dbAddWeek(title) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data: latest } = await supabase.from('workout_weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
+            const { data: latest } = await supabaseClient.from('workout_weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
             const nextNum = (latest && latest[0]) ? latest[0].week_number + 1 : 1;
             const weekTitle = title && title.trim() ? title.trim() : `สัปดาห์ที่ ${nextNum}`;
-            const { data: newW } = await supabase.from('workout_weeks').insert({ week_number: nextNum, title: weekTitle }).select();
+            const { data: newW } = await supabaseClient.from('workout_weeks').insert({ week_number: nextNum, title: weekTitle }).select();
             if (newW && newW.length > 0) {
-                await supabase.from('workout_days').insert({
+                await supabaseClient.from('workout_days').insert({
                     week_id: newW[0].id,
                     day_number: 1,
                     title: 'วันที่ 1',
@@ -411,9 +408,9 @@ async function dbAddWeek(title) {
 }
 
 async function dbDeleteWeek(weekId) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.from('workout_weeks').delete().eq('id', weekId);
+            await supabaseClient.from('workout_weeks').delete().eq('id', weekId);
         } catch (e) {
             console.warn('Supabase delete week note:', e);
         }
@@ -425,12 +422,12 @@ async function dbDeleteWeek(weekId) {
 
 async function dbAddDay(weekId, title, realDate, notes) {
     const dateVal = realDate || new Date().toISOString().split('T')[0];
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data: latest } = await supabase.from('workout_days').select('day_number').eq('week_id', weekId).order('day_number', { ascending: false }).limit(1);
+            const { data: latest } = await supabaseClient.from('workout_days').select('day_number').eq('week_id', weekId).order('day_number', { ascending: false }).limit(1);
             const nextNum = (latest && latest[0]) ? latest[0].day_number + 1 : 1;
             const dayTitle = title && title.trim() ? title.trim() : `วันที่ ${nextNum}`;
-            const { data: newD } = await supabase.from('workout_days').insert({
+            const { data: newD } = await supabaseClient.from('workout_days').insert({
                 week_id: weekId,
                 day_number: nextNum,
                 title: dayTitle,
@@ -453,9 +450,9 @@ async function dbAddDay(weekId, title, realDate, notes) {
 }
 
 async function dbUpdateDay(dayId, title, realDate, notes) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.from('workout_days').update({ title, real_date: realDate, notes }).eq('id', dayId);
+            await supabaseClient.from('workout_days').update({ title, real_date: realDate, notes }).eq('id', dayId);
         } catch (e) {
             console.warn('Supabase update day note:', e);
         }
@@ -470,9 +467,9 @@ async function dbUpdateDay(dayId, title, realDate, notes) {
 }
 
 async function dbDeleteDay(dayId) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.from('workout_days').delete().eq('id', dayId);
+            await supabaseClient.from('workout_days').delete().eq('id', dayId);
         } catch (e) {
             console.warn('Supabase delete day note:', e);
         }
@@ -483,9 +480,9 @@ async function dbDeleteDay(dayId) {
 }
 
 async function dbGetLogs(weekId, dayId) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            let query = supabase.from('workout_logs').select('*, exercises(*), workout_days(*, workout_weeks(*))');
+            let query = supabaseClient.from('workout_logs').select('*, exercises(*), workout_days(*, workout_weeks(*))');
             if (dayId !== null && dayId !== undefined) {
                 query = query.eq('day_id', dayId);
             }
@@ -541,9 +538,9 @@ async function dbGetLogs(weekId, dayId) {
 }
 
 async function dbAddLog(logData) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data, error } = await supabase.from('workout_logs').insert({
+            const { data, error } = await supabaseClient.from('workout_logs').insert({
                 day_id: logData.day_id,
                 exercise_id: logData.exercise_id,
                 sets: logData.sets,
@@ -569,9 +566,9 @@ async function dbAddLog(logData) {
 }
 
 async function dbDeleteLog(logId) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.from('workout_logs').delete().eq('id', logId);
+            await supabaseClient.from('workout_logs').delete().eq('id', logId);
         } catch (e) {
             console.warn('Supabase delete log note:', e);
         }
@@ -582,12 +579,12 @@ async function dbDeleteLog(logId) {
 }
 
 async function dbResetLogs(weekId, dayId) {
-    if (supabase) {
+    if (supabaseClient) {
         try {
             if (dayId !== null && dayId !== undefined) {
-                await supabase.from('workout_logs').delete().eq('day_id', dayId);
+                await supabaseClient.from('workout_logs').delete().eq('day_id', dayId);
             } else {
-                await supabase.from('workout_logs').delete().neq('id', 0);
+                await supabaseClient.from('workout_logs').delete().neq('id', 0);
             }
         } catch (e) {
             console.warn('Supabase reset logs note:', e);
@@ -683,7 +680,6 @@ function calculateScopedStats(logs, weekId, dayId) {
     Object.values(muscleStats).forEach(st => {
         const effVol = st.effective_volume;
 
-        // Heatmap level
         if (effVol <= 0) {
             st.heatmap_level = 0;
             st.heatmap_color = "#334155";
@@ -701,7 +697,6 @@ function calculateScopedStats(logs, weekId, dayId) {
             st.heatmap_color = "#ef4444";
         }
 
-        // Recovery decay
         if (st.hours_since_workout !== null && effVol > 0) {
             const fullRecoveryHours = Math.min(96.0, 36.0 + effVol * 3.0);
             const hoursPassed = st.hours_since_workout;
@@ -715,7 +710,6 @@ function calculateScopedStats(logs, weekId, dayId) {
             st.hours_remaining = 0;
         }
 
-        // Volume status landmarks
         if (effVol === 0) {
             st.volume_status = "Resting";
             st.volume_status_th = "ยังไม่ได้เล่น";
@@ -756,6 +750,9 @@ function calculateScopedStats(logs, weekId, dayId) {
 
 async function loadExercises() {
     AppState.exercises = await dbGetExercises();
+    if (!AppState.exercises || AppState.exercises.length === 0) {
+        AppState.exercises = INITIAL_EXERCISES;
+    }
     renderExerciseSelect();
 }
 
@@ -763,25 +760,39 @@ async function loadWeeksAndInit() {
     try {
         AppState.weeks = await dbGetWeeksWithDays();
 
-        if (AppState.weeks.length > 0) {
+        if (AppState.weeks && AppState.weeks.length > 0) {
+            // Ensure each week has at least Day 1
+            AppState.weeks.forEach(w => {
+                if (!w.days || w.days.length === 0) {
+                    w.days = [
+                        {
+                            id: (w.id * 10) + 1,
+                            week_id: w.id,
+                            day_number: 1,
+                            title: "วันที่ 1",
+                            real_date: new Date().toISOString().split('T')[0],
+                            notes: "",
+                            total_sets: 0,
+                            total_volume_kg: 0,
+                            exercises_count: 0,
+                            muscles_trained: []
+                        }
+                    ];
+                    w.total_days = 1;
+                }
+            });
+
             if (!AppState.selectedWeekId || !AppState.weeks.some(w => w.id === AppState.selectedWeekId)) {
-                AppState.selectedWeekId = AppState.weeks[AppState.weeks.length - 1].id;
+                AppState.selectedWeekId = AppState.weeks[0].id;
             }
 
             const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-            if (currentWeek && currentWeek.days.length > 0) {
+            if (currentWeek && currentWeek.days && currentWeek.days.length > 0) {
                 if (AppState.selectedDayId && !currentWeek.days.some(d => d.id === AppState.selectedDayId)) {
                     AppState.selectedDayId = null;
                 }
-                AppState.logTargetDayId = currentWeek.days[currentWeek.days.length - 1].id;
-            } else {
-                AppState.selectedDayId = null;
-                AppState.logTargetDayId = null;
+                AppState.logTargetDayId = currentWeek.days[0].id;
             }
-        } else {
-            AppState.selectedWeekId = null;
-            AppState.selectedDayId = null;
-            AppState.logTargetDayId = null;
         }
 
         renderWeekSelector();
@@ -818,10 +829,8 @@ function initWeekAndDayControls() {
             AppState.selectedDayId = null;
 
             const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-            if (currentWeek && currentWeek.days.length > 0) {
-                AppState.logTargetDayId = currentWeek.days[currentWeek.days.length - 1].id;
-            } else {
-                AppState.logTargetDayId = null;
+            if (currentWeek && currentWeek.days && currentWeek.days.length > 0) {
+                AppState.logTargetDayId = currentWeek.days[0].id;
             }
 
             renderWeeklySidebar();
@@ -872,7 +881,7 @@ function renderWeekSelector() {
     AppState.weeks.forEach(w => {
         const opt = document.createElement('option');
         opt.value = w.id;
-        opt.textContent = `${w.title} (${w.days.length} วันฝึก • ${w.total_sets} เซ็ต)`;
+        opt.textContent = `${w.title} (${(w.days || []).length} วันฝึก • ${w.total_sets || 0} เซ็ต)`;
         if (w.id === AppState.selectedWeekId) opt.selected = true;
         select.appendChild(opt);
     });
@@ -887,7 +896,7 @@ function renderTargetDaySelector() {
         const optGroup = document.createElement('optgroup');
         optGroup.label = w.title;
 
-        w.days.forEach(d => {
+        (w.days || []).forEach(d => {
             const opt = document.createElement('option');
             opt.value = d.id;
             const dateRef = d.real_date ? ` (${formatRealDate(d.real_date)})` : '';
@@ -901,7 +910,7 @@ function renderTargetDaySelector() {
 
     if (!AppState.logTargetDayId && AppState.weeks.length > 0) {
         const firstWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId) || AppState.weeks[0];
-        if (firstWeek && firstWeek.days.length > 0) {
+        if (firstWeek && firstWeek.days && firstWeek.days.length > 0) {
             AppState.logTargetDayId = firstWeek.days[0].id;
             select.value = AppState.logTargetDayId;
         }
@@ -926,11 +935,12 @@ function renderWeeklySidebar() {
         return;
     }
 
+    const daysCount = (currentWeek.days || []).length;
     if (weekTitleEl) weekTitleEl.textContent = currentWeek.title;
-    if (weekDaysCountEl) weekDaysCountEl.textContent = `${currentWeek.days.length} วันฝึก`;
-    if (weekTotalSetsEl) weekTotalSetsEl.textContent = `${currentWeek.total_sets} เซ็ต`;
-    if (weekTotalVolumeEl) weekTotalVolumeEl.textContent = `${currentWeek.total_volume_kg.toLocaleString()} kg`;
-    if (daysBadgeEl) daysBadgeEl.textContent = `${currentWeek.days.length} วัน`;
+    if (weekDaysCountEl) weekDaysCountEl.textContent = `${daysCount} วันฝึก`;
+    if (weekTotalSetsEl) weekTotalSetsEl.textContent = `${currentWeek.total_sets || 0} เซ็ต`;
+    if (weekTotalVolumeEl) weekTotalVolumeEl.textContent = `${(currentWeek.total_volume_kg || 0).toLocaleString()} kg`;
+    if (daysBadgeEl) daysBadgeEl.textContent = `${daysCount} วัน`;
 
     if (allWeekBtn) {
         if (AppState.selectedDayId === null) {
@@ -998,7 +1008,7 @@ function renderWeeklySidebar() {
                     ${musclesHtml}
 
                     <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                        <span>${day.exercises_count} ท่าฝึก • ${day.total_sets} เซ็ต</span>
+                        <span>${day.exercises_count || 0} ท่าฝึก • ${day.total_sets || 0} เซ็ต</span>
                         <span class="text-sky-300 font-bold">${day.total_volume_kg > 0 ? day.total_volume_kg.toLocaleString() + ' kg' : '-'}</span>
                     </div>
                 </div>
@@ -1034,7 +1044,7 @@ function renderScopeHeaders() {
         if (historyScopeSubtitle) historyScopeSubtitle.textContent = `แสดงประวัติทั้งหมดของ ${currentWeek.title}`;
         if (labelStatSets) labelStatSets.textContent = `เซ็ตใน${currentWeek.title}`;
     } else {
-        const currentDay = currentWeek.days.find(d => d.id === AppState.selectedDayId);
+        const currentDay = (currentWeek.days || []).find(d => d.id === AppState.selectedDayId);
         const dayTitle = currentDay ? currentDay.title : `วันฝึกที่ ${AppState.selectedDayId}`;
         const dayDate = (currentDay && currentDay.real_date) ? ` (${formatRealDate(currentDay.real_date)})` : '';
         const text = `สถิติ: ${currentWeek.title} > ${dayTitle}${dayDate}`;
@@ -1370,7 +1380,7 @@ function initModalControls() {
 window.openEditDayModal = function(dayId) {
     const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
     if (!currentWeek) return;
-    const day = currentWeek.days.find(d => d.id === dayId);
+    const day = (currentWeek.days || []).find(d => d.id === dayId);
     if (!day) return;
 
     document.getElementById('day-modal-title').textContent = `แก้ไข ${day.title}`;
@@ -1385,7 +1395,7 @@ window.openEditDayModal = function(dayId) {
 
 window.deleteDay = async function(dayId) {
     const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-    const day = currentWeek ? currentWeek.days.find(d => d.id === dayId) : null;
+    const day = currentWeek ? (currentWeek.days || []).find(d => d.id === dayId) : null;
     const title = day ? day.title : 'วันฝึกนี้';
 
     if (confirm(`คุณต้องการลบ "${title}" และประวัติการฝึกในวันนี้หรือไม่?`)) {
@@ -1429,21 +1439,25 @@ function renderBodyModel() {
     const container = document.getElementById('anatomy-container');
     if (!container) return;
 
-    if (typeof BodyAnatomySVG === 'undefined') {
+    const svgProvider = window.BodyAnatomySVG || window.BodySVG;
+    if (!svgProvider) {
         container.innerHTML = `<div class="p-8 text-center text-slate-500">กำลังโหลด Anatomy SVG...</div>`;
         return;
     }
+
+    const getFront = () => svgProvider.getAnteriorView ? svgProvider.getAnteriorView() : (svgProvider.getAnteriorSVG ? svgProvider.getAnteriorSVG() : '');
+    const getBack = () => svgProvider.getPosteriorView ? svgProvider.getPosteriorView() : (svgProvider.getPosteriorSVG ? svgProvider.getPosteriorSVG() : '');
 
     if (AppState.currentView === 'dual') {
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full h-full items-center">
                 <div class="flex flex-col items-center">
                     <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
-                    <div class="w-full max-w-[280px]">${BodyAnatomySVG.getAnteriorView()}</div>
+                    <div class="w-full max-w-[280px]">${getFront()}</div>
                 </div>
                 <div class="flex flex-col items-center">
                     <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
-                    <div class="w-full max-w-[280px]">${BodyAnatomySVG.getPosteriorView()}</div>
+                    <div class="w-full max-w-[280px]">${getBack()}</div>
                 </div>
             </div>
         `;
@@ -1451,14 +1465,14 @@ function renderBodyModel() {
         container.innerHTML = `
             <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
                 <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
-                ${BodyAnatomySVG.getPosteriorView()}
+                ${getBack()}
             </div>
         `;
     } else {
         container.innerHTML = `
             <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
                 <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
-                ${BodyAnatomySVG.getAnteriorView()}
+                ${getFront()}
             </div>
         `;
     }
