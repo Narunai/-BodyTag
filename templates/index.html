@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BodyTag - Workout Muscle Tracker & Heatmap</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-sky-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                    <span class="text-xl">⚡</span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-300 to-amber-300 bg-clip-text text-transparent">
+                            BodyTag
+                        </h1>
+                        <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                            Heatmap Pro
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">ระบบติดตามมัดกล้ามเนื้อ & Heatmap วิเคราะห์การฟื้นตัวรายสัปดาห์</p>
+                </div>
+            </div>
+
+            <!-- Global / Current Scope Summary Badges -->
+            <div class="hidden md:flex items-center gap-3 text-xs">
+                <div class="glass-card px-3.5 py-2 rounded-xl flex items-center gap-2.5 border border-slate-800">
+                    <span class="text-amber-400 font-bold text-base font-mono" id="stat-total-sets">0</span>
+                    <span class="text-slate-400" id="label-stat-sets">เซ็ตในสัปดาห์นี้</span>
+                </div>
+                <div class="glass-card px-3.5 py-2 rounded-xl flex items-center gap-2.5 border border-slate-800">
+                    <span class="text-emerald-400 font-bold text-base font-mono" id="stat-active-muscles">0</span>
+                    <span class="text-slate-400">มัดกล้ามเนื้อที่บริหาร</span>
+                </div>
+                <div class="glass-card px-3.5 py-2 rounded-xl flex items-center gap-2.5 border border-slate-800">
+                    <span class="text-sky-400 font-bold text-base font-mono" id="stat-total-volume">0 kg</span>
+                    <span class="text-slate-400">น้ำหนักสะสม (Volume)</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-2.5">
+                <button id="btn-open-custom-modal" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+                    <span>+</span> เพิ่มท่าฝึกใหม่
+                </button>
+                <button id="btn-reset-logs" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition flex items-center gap-1.5 shadow-sm">
+                    ล้างข้อมูล
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+        
+        <!-- Top 3-Column Section: [1] Weekly/Daily Sidebar, [2] Anatomy Heatmap, [3] Workout Logger -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- Left Column: Weekly & Daily Workout Log (4 cols on LG/XL) -->
+            <div class="lg:col-span-4 xl:col-span-4 flex flex-col space-y-4">
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 shadow-xl flex flex-col">
+                    
+                    <!-- Week Header & Week Switcher -->
+                    <div class="border-b border-slate-800/80 pb-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                                <span>📅</span> บันทึกรายสัปดาห์ & วันฝึก
+                            </h2>
+                            <button id="btn-add-week-modal" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 transition flex items-center gap-1 shadow-sm">
+                                <span>+</span> สัปดาห์ใหม่
+                            </button>
+                        </div>
+
+                        <!-- Week Selection Dropdown -->
+                        <div class="flex items-center gap-2">
+                            <label for="week-select" class="text-xs text-slate-400 whitespace-nowrap">เลือกสัปดาห์:</label>
+                            <select id="week-select" class="w-full bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-sky-400 font-bold focus:outline-none focus:border-sky-500">
+                                <!-- Dynamic week options -->
+                            </select>
+                            <button id="btn-delete-current-week" title="ลบสัปดาห์นี้" class="p-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selected Week Summary Card -->
+                    <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 mb-4 text-xs">
+                        <div class="flex items-center justify-between text-slate-300 mb-2">
+                            <span class="font-bold text-sky-400 text-sm" id="week-card-title">สัปดาห์ที่ 1</span>
+                            <span class="text-[11px] text-slate-400" id="week-card-days-count">0 วันฝึก</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-center font-mono">
+                            <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                                <span class="text-slate-400 text-[10px] block font-sans">เซ็ตรวมทั้งสัปดาห์</span>
+                                <span class="text-amber-400 font-bold text-sm" id="week-card-total-sets">0 Sets</span>
+                            </div>
+                            <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                                <span class="text-slate-400 text-[10px] block font-sans">น้ำหนักรวม (Volume)</span>
+                                <span class="text-sky-400 font-bold text-sm" id="week-card-total-volume">0 kg</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scope Action Controls: [View All Week] / [+ Add Day] -->
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <button id="btn-scope-all-week" class="py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5">
+                            <span>👁️</span> ดูสถิติทั้งสัปดาห์
+                        </button>
+                        <button id="btn-add-day-modal" class="py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition text-center flex items-center justify-center gap-1.5">
+                            <span>+</span> เพิ่มวันฝึก (Day)
+                        </button>
+                    </div>
+
+                    <!-- Days List in Selected Week -->
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-slate-400 mb-2 font-semibold">
+                            <span>รายการวันฝึกในสัปดาห์นี้:</span>
+                            <span id="days-count-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">0 วัน</span>
+                        </div>
+
+                        <div id="workout-days-list" class="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                            <!-- Dynamic Day Cards Injected Here -->
+                        </div>
+
+                        <div id="days-empty-state" class="py-8 text-center text-slate-500 text-xs hidden">
+                            <p>ยังไม่มีวันฝึกในสัปดาห์นี้</p>
+                            <button id="btn-empty-add-day" class="mt-2 text-sky-400 hover:underline">+ เพิ่มวันฝึกแรก</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Middle Column: Anatomy Heatmap (4 cols on LG/XL) -->
+            <div class="lg:col-span-4 xl:col-span-4 flex flex-col space-y-4">
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 shadow-xl flex-1 flex flex-col justify-between">
+                    
+                    <!-- View Selector Header -->
+                    <div>
+                        <!-- Active Scope Banner -->
+                        <div class="mb-3 px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-between">
+                            <div class="flex items-center gap-2 overflow-hidden">
+                                <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse flex-shrink-0"></span>
+                                <span id="active-scope-label" class="text-xs font-bold text-sky-300 truncate">
+                                    สถิติ: สัปดาห์ที่ 1 (ภาพรวมทั้งสัปดาห์)
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                                แผนที่ร่างกาย (Muscle Map)
+                            </h2>
+
+                            <!-- Color Mode Dropdown -->
+                            <div class="flex items-center gap-1.5">
+                                <select id="color-mode-select" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-sky-500">
+                                    <option value="heatmap">🔥 Heatmap เซ็ต</option>
+                                    <option value="recovery">⏳ การฟื้นตัว (%)</option>
+                                    <option value="landmarks">🎯 Volume Target</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- View Toggle Buttons -->
+                        <div class="grid grid-cols-3 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/80 mb-3 text-xs font-semibold">
+                            <button data-view-btn="anterior" class="py-1.5 rounded-lg bg-sky-500 text-white transition text-center shadow-lg">
+                                ด้านหน้า
+                            </button>
+                            <button data-view-btn="posterior" class="py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition text-center">
+                                ด้านหลัง
+                            </button>
+                            <button data-view-btn="dual" class="py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition text-center">
+                                คู่ (Dual)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SVG Canvas Body Container -->
+                    <div id="body-model-container" class="relative py-2 flex items-center justify-center min-h-[360px]">
+                        <!-- Dynamic SVG will be injected here -->
+                    </div>
+
+                    <!-- Dynamic Legend -->
+                    <div id="model-legend" class="pt-3 border-t border-slate-800/80">
+                        <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-700 inline-block"></span> 0 เซ็ต</div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> 1-3 เซ็ต</div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> 4-7 เซ็ต</div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-500 inline-block"></span> 8-12 เซ็ต</div>
+                            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> 13+ เซ็ต</div>
+                        </div>
+                    </div>
+
+                    <!-- Volume Landmarks Guide Pill -->
+                    <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-2.5 mt-3 text-xs text-slate-400">
+                        <div class="grid grid-cols-2 gap-1.5 font-mono text-[10px]">
+                            <div class="p-1.5 rounded bg-slate-800/60 border border-slate-700/40">
+                                <span class="text-sky-400 font-bold">&lt; MEV:</span> คงสภาพ
+                            </div>
+                            <div class="p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                                <span class="text-emerald-400 font-bold">MEV-MAV:</span> โตดีที่สุด
+                            </div>
+                            <div class="p-1.5 rounded bg-amber-500/10 border border-amber-500/20">
+                                <span class="text-amber-400 font-bold">MAV-MRV:</span> ปริมาณสูง
+                            </div>
+                            <div class="p-1.5 rounded bg-red-500/10 border border-red-500/20">
+                                <span class="text-red-400 font-bold">&gt; MRV:</span> เกินลิมิต
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Right Column: Exercise Logger Form (4 cols on LG/XL) -->
+            <div class="lg:col-span-4 xl:col-span-4 flex flex-col space-y-4">
+                
+                <!-- Workout Logger Form Card -->
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 shadow-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
+                                🏋️
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-base text-slate-100">บันทึกการฝึก (Log Exercise)</h3>
+                                <p class="text-xs text-slate-400">ระบุเซ็ต/น้ำหนักเพื่อกระจายเข้ามัดกล้ามเนื้อ</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Target Day Selection Banner -->
+                    <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 mb-4 text-xs">
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">
+                            🎯 กำลังบันทึกลงใน (Target Day):
+                        </label>
+                        <select id="log-target-day-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-sky-300 font-bold focus:outline-none focus:border-sky-500">
+                            <!-- Dynamic options: Week X > Day Y (Date) -->
+                        </select>
+                    </div>
+
+                    <form id="workout-log-form" class="space-y-3.5">
+                        <!-- Category and Exercise Dropdowns -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">หมวดหมู่กล้ามเนื้อ</label>
+                            <select id="category-filter" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+                                <option value="all">ทั้งหมด (All Groups)</option>
+                                <option value="Chest">อก (Chest)</option>
+                                <option value="Back">หลัง (Back)</option>
+                                <option value="Shoulders">ไหล่ (Shoulders)</option>
+                                <option value="Legs">ขา & ก้น (Legs & Glutes)</option>
+                                <option value="Arms">แขน (Arms)</option>
+                                <option value="Core">แกนกลางลำตัว (Core)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">เลือกท่าออกกำลังกาย</label>
+                            <select id="exercise-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+                                <!-- Dynamic options -->
+                            </select>
+                        </div>
+
+                        <!-- Live Muscle Impact Preview -->
+                        <div id="exercise-muscle-preview" class="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800 min-h-[50px] flex flex-col justify-center">
+                            <!-- Preview tags rendered here -->
+                        </div>
+
+                        <!-- Workout Parameters (Sets, Reps, Weight, RPE) -->
+                        <div class="grid grid-cols-2 gap-2.5 pt-1">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">จำนวนเซ็ต (Sets)</label>
+                                <input type="number" id="input-sets" min="1" max="50" value="3" required
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-center text-sky-400 font-bold focus:outline-none focus:border-sky-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">จำนวนครั้ง (Reps)</label>
+                                <input type="number" id="input-reps" min="1" max="200" value="10"
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-center text-slate-200 focus:outline-none focus:border-sky-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">น้ำหนัก (kg)</label>
+                                <input type="number" id="input-weight" min="0" step="0.5" value="0"
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-center text-slate-200 focus:outline-none focus:border-sky-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1">ระดับ RPE (1-10)</label>
+                                <input type="number" id="input-rpe" min="1" max="10" step="0.5" value="8.0"
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-center text-amber-400 focus:outline-none focus:border-sky-500">
+                            </div>
+                        </div>
+
+                        <!-- Quick Set Selectors -->
+                        <div class="flex items-center gap-2 text-xs pt-1">
+                            <span class="text-slate-400">เซ็ตด่วน:</span>
+                            <button type="button" data-quick-sets="1" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">+1</button>
+                            <button type="button" data-quick-sets="3" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">+3</button>
+                            <button type="button" data-quick-sets="4" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">+4</button>
+                            <button type="button" data-quick-sets="5" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono">+5</button>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 font-bold text-sm text-white shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2">
+                            <span>+ บันทึกท่านี้ (Log Workout)</span>
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Muscle Detail Cards Grid -->
+        <div>
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-100 flex items-center gap-2">
+                        <span>📊</span> สถานะปริมาณการฝึก & การฟื้นตัวรายมัดกล้ามเนื้อ (Muscle Breakdown)
+                    </h3>
+                    <p class="text-xs text-slate-400" id="muscle-cards-scope-subtitle">คำนวณตามสถิติของสัปดาห์ที่เลือก</p>
+                </div>
+                <span class="text-xs text-slate-400">16 กลุ่มกล้ามเนื้อมาตรฐาน</span>
+            </div>
+
+            <div id="muscle-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Dynamic cards populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Workout History Table -->
+        <div class="glass-card rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-base text-slate-100 flex items-center gap-2">
+                        <span>📋</span> ประวัติการฝึกที่บันทึก (Workout History Log)
+                    </h3>
+                    <span id="history-scope-subtitle" class="text-xs text-slate-400">แสดงรายการในสโคปที่เลือก</span>
+                </div>
+                <span id="stat-total-logs" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-sky-400 font-mono font-bold">0 รายการ</span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-slate-800">
+                        <tr>
+                            <th class="py-3 px-4">เวลา/วัน</th>
+                            <th class="py-3 px-4">วันฝึก (Day)</th>
+                            <th class="py-3 px-4">ท่าออกกำลังกาย</th>
+                            <th class="py-3 px-4">หมวดหมู่</th>
+                            <th class="py-3 px-4 text-center">เซ็ต</th>
+                            <th class="py-3 px-4 text-center">ครั้ง (Reps)</th>
+                            <th class="py-3 px-4 text-center">น้ำหนัก</th>
+                            <th class="py-3 px-4 text-center">RPE</th>
+                            <th class="py-3 px-4 text-right">การจัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workout-logs-tbody">
+                        <!-- Dynamic log rows -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="workout-logs-empty" class="py-12 text-center text-slate-500 hidden">
+                <p class="text-sm">ยังไม่มีประวัติการฝึกในสโคปนี้ กดบันทึกท่าออกกำลังกายด้านบนเพื่อเริ่มต้น</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Floating Interactive Tooltip -->
+    <div id="muscle-tooltip" class="fixed opacity-0 pointer-events-none transition-opacity duration-150 glass-card rounded-xl p-3 border border-sky-500/30 shadow-2xl text-xs w-64">
+        <h4 id="tooltip-title" class="font-bold text-sky-400 text-sm mb-1">กล้ามเนื้อ</h4>
+        <div id="tooltip-sets" class="font-semibold text-slate-200 mb-1">0 Sets</div>
+        <div id="tooltip-recovery" class="text-emerald-400 mb-1">การฟื้นตัว: 100%</div>
+        <div id="tooltip-status" class="text-slate-400 mb-2">สถานะ: พัก</div>
+        <div id="tooltip-exercises-wrap" class="border-t border-slate-800 pt-1.5 hidden">
+            <span class="text-[10px] text-slate-500 font-bold block mb-1">ท่าที่บริหาร:</span>
+            <p id="tooltip-exercises" class="text-[11px] text-slate-300 font-mono"></p>
+        </div>
+    </div>
+
+    <!-- Modal: Add Custom Exercise -->
+    <div id="custom-exercise-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card rounded-2xl p-6 border border-slate-700 max-w-lg w-full shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-base text-slate-100">เพิ่มท่าออกกำลังกายใหม่ (Custom Exercise)</h3>
+                <button id="btn-close-custom-modal" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+
+            <form id="custom-exercise-form" class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">ชื่อท่า (English)</label>
+                    <input type="text" id="custom-ex-name" required placeholder="e.g. Bulgarian Split Squat"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">ชื่อภาษาไทย</label>
+                    <input type="text" id="custom-ex-nameth" placeholder="e.g. บัลแกเรียน สปลิท สควอท"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">หมวดหมู่</label>
+                    <select id="custom-ex-category" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500">
+                        <option value="Chest">อก (Chest)</option>
+                        <option value="Back">หลัง (Back)</option>
+                        <option value="Shoulders">ไหล่ (Shoulders)</option>
+                        <option value="Legs">ขา & ก้น (Legs & Glutes)</option>
+                        <option value="Arms">แขน (Arms)</option>
+                        <option value="Core">แกนกลางลำตัว (Core)</option>
+                    </select>
+                </div>
+
+                <!-- Muscle Selection Checkboxes -->
+                <div class="border-t border-slate-800 pt-3">
+                    <label class="block font-bold text-sky-400 mb-1.5">1. กล้ามเนื้อมัดหลัก (Primary - 100% Load):</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-900/50 rounded-lg">
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="chest"> อก (Chest)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="upper-back"> หลังบน/ปีก</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="lower-back"> หลังล่าง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="front-deltoids"> ไหล่หน้า/ข้าง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="back-deltoids"> ไหล่หลัง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="biceps"> หน้าแขน (Biceps)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="triceps"> หลังแขน (Triceps)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="quadriceps"> ขาหน้า (Quads)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="hamstrings"> ขาหลัง (Hamstrings)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="gluteal"> ก้น (Glutes)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="calves"> น่อง (Calves)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="abs"> หน้าท้อง (Abs)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-primary" value="obliques"> ท้องข้าง</label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-amber-400 mb-1.5">2. กล้ามเนื้อมัดรอง (Secondary - 50% Load):</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-900/50 rounded-lg">
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="chest"> อก (Chest)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="upper-back"> หลังบน/ปีก</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="lower-back"> หลังล่าง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="front-deltoids"> ไหล่หน้า/ข้าง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="back-deltoids"> ไหล่หลัง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="biceps"> หน้าแขน (Biceps)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="triceps"> หลังแขน (Triceps)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="quadriceps"> ขาหน้า (Quads)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="hamstrings"> ขาหลัง (Hamstrings)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="gluteal"> ก้น (Glutes)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="calves"> น่อง (Calves)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="abs"> หน้าท้อง (Abs)</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="obliques"> ท้องข้าง</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" name="custom-secondary" value="forearms"> ปลายแขน (Forearms)</label>
+                    </div>
+                </div>
+
+                <div class="pt-3">
+                    <button type="submit" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-white transition">
+                        บันทึกท่าใหม่
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add New Week -->
+    <div id="add-week-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card rounded-2xl p-6 border border-slate-700 max-w-md w-full shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-base text-slate-100">เพิ่มสัปดาห์ใหม่ (Add New Week)</h3>
+                <button id="btn-close-week-modal" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+            <form id="add-week-form" class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">ชื่อสัปดาห์ (ระบุหรือไม่ระบุก็ได้)</label>
+                    <input type="text" id="input-week-title" placeholder="เช่น สัปดาห์ที่ 2 หรือ Hypertrophy Block W1"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-white transition">
+                        + สร้างสัปดาห์ใหม่
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Day -->
+    <div id="day-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card rounded-2xl p-6 border border-slate-700 max-w-md w-full shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="day-modal-title" class="font-bold text-base text-slate-100">เพิ่มวันฝึกใหม่ (Add Workout Day)</h3>
+                <button id="btn-close-day-modal" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+            <form id="day-form" class="space-y-4 text-xs">
+                <input type="hidden" id="input-day-id" value="">
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">ชื่อวันฝึก (ไม่ fix วัน กำหนดเองได้ตามต้องการ)</label>
+                    <input type="text" id="input-day-title" required placeholder="เช่น วันที่ 1 หรือ Push Day / Upper Body"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">📅 วันเวลาจริงอ้างอิง (Reference Date)</label>
+                    <input type="date" id="input-day-realdate" required
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-sky-500 font-mono">
+                    <span class="text-[11px] text-slate-400 block mt-1">แนบไว้อ้างอิงว่าวันที่นี้ตรงกับวันไหนจริงในปฏิทิน</span>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-300 mb-1">บันทึกเพิ่มเติม (Notes - ตัวเลือก)</label>
+                    <input type="text" id="input-day-notes" placeholder="เช่น เน้นฝึกกล้ามอกและไหล่"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="pt-2">
+                    <button type="submit" id="day-form-submit-btn" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-white transition">
+                        บันทึกวันฝึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/body_svg.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+

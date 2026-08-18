@@ -1,0 +1,139 @@
+/* BodyTag - Custom Styles & Animations */
+
+:root {
+    --bg-dark: #090d16;
+    --card-dark: #131b2e;
+    --border-dark: #1e293b;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: #f8fafc;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* Body Anatomy SVG Muscles */
+.muscle-part {
+    fill: #334155;
+    stroke: #1e293b;
+    stroke-width: 1.2;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.muscle-part:hover {
+    stroke: #ffffff;
+    stroke-width: 2.2;
+    filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.7));
+    cursor: pointer;
+}
+
+.muscle-part.active-selected {
+    stroke: #38bdf8;
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.9));
+}
+
+/* Heatmap Glow Animation for High Intensity */
+@keyframes pulse-glow {
+    0%, 100% {
+        filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.4));
+    }
+    50% {
+        filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.9));
+    }
+}
+
+.glow-high {
+    animation: pulse-glow 2.5s infinite ease-in-out;
+}
+
+/* Tooltip styling */
+#muscle-tooltip {
+    pointer-events: none;
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    z-index: 50;
+}
+
+/* Custom Glassmorphism */
+.glass-card {
+    background: rgba(19, 27, 46, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-hover {
+    transition: all 0.2s ease-in-out;
+}
+.glass-card-hover:hover {
+    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+}
+
+/* Badge tags */
+.tag-primary {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.tag-secondary {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Day Cards Styling in Left Sidebar */
+.day-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.day-card:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(15, 23, 42, 0.85);
+    transform: translateY(-1px);
+}
+
+.day-card.active-day {
+    background: rgba(14, 165, 233, 0.12);
+    border-color: rgba(56, 189, 248, 0.8);
+    box-shadow: 0 0 15px -3px rgba(14, 165, 233, 0.25);
+}
+
+.muscle-summary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    color: #94a3b8;
+}
+
+.active-day .muscle-summary-pill {
+    background: rgba(14, 165, 233, 0.15);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #7dd3fc;
+}
+
