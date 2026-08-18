@@ -1273,15 +1273,14 @@ function updateTargetMusclesPreview() {
 
 function initModalControls() {
     // 1. Add Week Modal
-    const openWeekModalBtn = document.getElementById('btn-open-add-week-modal');
+    const openWeekModalBtn = document.getElementById('btn-add-week-modal') || document.getElementById('btn-open-add-week-modal');
     const weekModal = document.getElementById('add-week-modal');
     const closeWeekModalBtn = document.getElementById('btn-close-week-modal');
     const weekForm = document.getElementById('add-week-form');
 
     if (openWeekModalBtn && weekModal) {
         openWeekModalBtn.addEventListener('click', () => {
-            document.getElementById('input-week-title').value = '';
-            weekModal.classList.remove('hidden');
+            window.openAddWeekModal();
         });
     }
     if (closeWeekModalBtn && weekModal) {
@@ -1303,24 +1302,14 @@ function initModalControls() {
     }
 
     // 2. Add / Edit Day Modal
-    const openDayModalBtn = document.getElementById('btn-open-add-day-modal');
+    const openDayModalBtn = document.getElementById('btn-add-day-modal') || document.getElementById('btn-open-add-day-modal') || document.getElementById('btn-empty-add-day');
     const dayModal = document.getElementById('day-modal');
     const closeDayModalBtn = document.getElementById('btn-close-day-modal');
     const dayForm = document.getElementById('day-form');
 
     if (openDayModalBtn && dayModal) {
         openDayModalBtn.addEventListener('click', () => {
-            if (!AppState.selectedWeekId) {
-                showToast('กรุณาสร้างหรือเลือกสัปดาห์ก่อน', 'error');
-                return;
-            }
-            document.getElementById('day-modal-title').textContent = 'เพิ่มวันฝึกใหม่ (Add Workout Day)';
-            document.getElementById('input-day-id').value = '';
-            document.getElementById('input-day-title').value = '';
-            document.getElementById('input-day-realdate').value = new Date().toISOString().split('T')[0];
-            document.getElementById('input-day-notes').value = '';
-            document.getElementById('day-form-submit-btn').textContent = 'เพิ่มวันฝึก';
-            dayModal.classList.remove('hidden');
+            window.openAddDayModal();
         });
     }
     if (closeDayModalBtn && dayModal) {
@@ -1358,8 +1347,7 @@ function initModalControls() {
 
     if (openCustomModalBtn && customModal) {
         openCustomModalBtn.addEventListener('click', () => {
-            renderMuscleCheckboxes();
-            customModal.classList.remove('hidden');
+            window.openCustomModal();
         });
     }
     if (closeCustomModalBtn && customModal) {
@@ -1369,11 +1357,12 @@ function initModalControls() {
         customForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('custom-ex-name').value.trim();
-            const nameTh = document.getElementById('custom-ex-name-th').value.trim() || name;
+            const nameTh = document.getElementById('custom-ex-nameth') ? document.getElementById('custom-ex-nameth').value.trim() : '';
+            const finalNameTh = nameTh || name;
             const category = document.getElementById('custom-ex-category').value;
 
-            const primary = Array.from(document.querySelectorAll('input[name="primary-muscle"]:checked')).map(cb => cb.value);
-            const secondary = Array.from(document.querySelectorAll('input[name="secondary-muscle"]:checked')).map(cb => cb.value);
+            const primary = Array.from(document.querySelectorAll('input[name="custom-primary"]:checked, input[name="primary-muscle"]:checked')).map(cb => cb.value);
+            const secondary = Array.from(document.querySelectorAll('input[name="custom-secondary"]:checked, input[name="secondary-muscle"]:checked')).map(cb => cb.value);
 
             if (primary.length === 0) {
                 showToast('กรุณาเลือกกล้ามเนื้อหลักอย่างน้อย 1 มัด', 'error');
@@ -1384,20 +1373,54 @@ function initModalControls() {
             await dbAddExercise({
                 id: exId,
                 name,
-                name_th: nameTh,
+                name_th: finalNameTh,
                 category,
                 primary,
                 secondary
             });
 
             customModal.classList.add('hidden');
-            showToast(`เพิ่มท่าฝึก "${nameTh}" สำเร็จ! 🎉`);
+            showToast(`เพิ่มท่าฝึก "${finalNameTh}" สำเร็จ! 🎉`);
             await loadExercises();
             AppState.selectedExerciseId = exId;
             renderExerciseSelect();
         });
     }
 }
+
+window.openAddWeekModal = function() {
+    const weekModal = document.getElementById('add-week-modal');
+    if (weekModal) {
+        const input = document.getElementById('input-week-title');
+        if (input) input.value = '';
+        weekModal.classList.remove('hidden');
+    }
+};
+
+window.openAddDayModal = function() {
+    const dayModal = document.getElementById('day-modal');
+    if (!AppState.selectedWeekId) {
+        showToast('กรุณาสร้างหรือเลือกสัปดาห์ก่อน', 'error');
+        return;
+    }
+    if (dayModal) {
+        document.getElementById('day-modal-title').textContent = 'เพิ่มวันฝึกใหม่ (Add Workout Day)';
+        document.getElementById('input-day-id').value = '';
+        document.getElementById('input-day-title').value = '';
+        document.getElementById('input-day-realdate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('input-day-notes').value = '';
+        document.getElementById('day-form-submit-btn').textContent = 'เพิ่มวันฝึก';
+        dayModal.classList.remove('hidden');
+    }
+};
+
+window.openCustomModal = function() {
+    const customModal = document.getElementById('custom-exercise-modal');
+    if (customModal) {
+        renderMuscleCheckboxes();
+        customModal.classList.remove('hidden');
+    }
+};
 
 window.openEditDayModal = function(dayId) {
     const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);

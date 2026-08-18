@@ -159,10 +159,10 @@
 
             <!-- Action Buttons -->
             <div class="flex items-center gap-2.5">
-                <button id="btn-open-custom-modal" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+                <button id="btn-open-custom-modal" onclick="window.openCustomModal && window.openCustomModal()" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm cursor-pointer">
                     <span>+</span> เพิ่มท่าฝึกใหม่
                 </button>
-                <button id="btn-lock-app" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition flex items-center gap-1 shadow-sm" title="ล็อคหน้าจอ / ออกจากระบบ">
+                <button id="btn-lock-app" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition flex items-center gap-1 shadow-sm cursor-pointer" title="ล็อคหน้าจอ / ออกจากระบบ">
                     <span>🔒</span> ล็อค
                 </button>
             </div>
@@ -185,7 +185,7 @@
                             <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
                                 <span>📅</span> บันทึกรายสัปดาห์ & วันฝึก
                             </h2>
-                            <button id="btn-add-week-modal" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 transition flex items-center gap-1 shadow-sm">
+                            <button id="btn-add-week-modal" onclick="window.openAddWeekModal && window.openAddWeekModal()" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 transition flex items-center gap-1 shadow-sm cursor-pointer">
                                 <span>+</span> สัปดาห์ใหม่
                             </button>
                         </div>
@@ -196,7 +196,7 @@
                             <select id="week-select" class="w-full bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-sky-400 font-bold focus:outline-none focus:border-sky-500">
                                 <!-- Dynamic week options -->
                             </select>
-                            <button id="btn-delete-current-week" title="ลบสัปดาห์นี้" class="p-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition">
+                            <button id="btn-delete-current-week" title="ลบสัปดาห์นี้" class="p-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition cursor-pointer">
                                 🗑️
                             </button>
                         </div>
@@ -222,10 +222,10 @@
 
                     <!-- Scope Action Controls: [View All Week] / [+ Add Day] -->
                     <div class="grid grid-cols-2 gap-2 mb-4">
-                        <button id="btn-scope-all-week" class="py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5">
+                        <button id="btn-scope-all-week" class="py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5 cursor-pointer">
                             <span>👁️</span> ดูสถิติทั้งสัปดาห์
                         </button>
-                        <button id="btn-add-day-modal" class="py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition text-center flex items-center justify-center gap-1.5">
+                        <button id="btn-add-day-modal" onclick="window.openAddDayModal && window.openAddDayModal()" class="py-2 px-3 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition text-center flex items-center justify-center gap-1.5 cursor-pointer">
                             <span>+</span> เพิ่มวันฝึก (Day)
                         </button>
                     </div>
