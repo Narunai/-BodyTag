@@ -1230,15 +1230,16 @@ function renderExerciseSelect() {
             const opt = document.createElement('option');
             opt.value = ex.id;
             opt.textContent = `${ex.name_th || ex.name} (${ex.name})`;
-            if (ex.id === AppState.selectedExerciseId) opt.selected = true;
             group.appendChild(opt);
         });
         select.appendChild(group);
     });
 
-    if (filtered.length > 0 && !AppState.selectedExerciseId) {
-        select.selectedIndex = 1;
-        AppState.selectedExerciseId = select.value;
+    if (filtered.length > 0) {
+        if (!AppState.selectedExerciseId || !filtered.some(e => e.id === AppState.selectedExerciseId)) {
+            AppState.selectedExerciseId = filtered[0].id;
+        }
+        select.value = AppState.selectedExerciseId;
     }
 
     updateTargetMusclesPreview();
@@ -1248,7 +1249,9 @@ function updateTargetMusclesPreview() {
     const container = document.getElementById('exercise-muscle-preview') || document.getElementById('target-muscles-preview');
     if (!container) return;
 
-    const ex = AppState.exercises.find(e => e.id === AppState.selectedExerciseId);
+    const select = document.getElementById('exercise-select');
+    const selectedId = (select && select.value) ? select.value : AppState.selectedExerciseId;
+    const ex = AppState.exercises.find(e => e.id === selectedId);
     if (!ex) {
         container.innerHTML = '<span class="text-slate-500 italic text-xs">เลือกท่าฝึกเพื่อดูมัดกล้ามเนื้อ</span>';
         return;
