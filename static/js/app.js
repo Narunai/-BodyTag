@@ -190,6 +190,8 @@ async function initializeApp() {
     initModalControls();
     initWeekAndDayControls();
 
+    renderBodyModel();
+
     await loadExercises();
     await loadWeeksAndInit();
 }

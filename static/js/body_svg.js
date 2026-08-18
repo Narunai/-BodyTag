@@ -20,31 +20,31 @@ const BodySVG = {
             </defs>
 
             <!-- Base Body Outline / Non-target areas (Head, Hands, Feet, Joints) -->
-            <g class="body-base fill-slate-800/80 stroke-slate-700/60" stroke-width="1.5">
+            <g class="body-base" fill="#1e293b" stroke="#334155" stroke-width="1.5">
                 <!-- Head & Neck Base -->
-                <ellipse cx="160" cy="45" rx="26" ry="32" class="fill-slate-800 stroke-slate-700" />
-                <path d="M148 76 L146 95 L174 95 L172 76 Z" class="fill-slate-800" />
+                <ellipse cx="160" cy="45" rx="26" ry="32" fill="#1e293b" stroke="#334155" />
+                <path d="M148 76 L146 95 L174 95 L172 76 Z" fill="#1e293b" />
                 
                 <!-- Collarbone reference -->
                 <path d="M115 102 Q160 112 205 102" fill="none" stroke="#475569" stroke-width="1.5" />
 
                 <!-- Hands -->
                 <!-- Left Hand (anatomical right) -->
-                <path d="M66 345 C64 360 62 375 66 385 C69 392 73 392 75 385 C77 375 76 360 74 345 Z" class="fill-slate-800 stroke-slate-700" />
+                <path d="M66 345 C64 360 62 375 66 385 C69 392 73 392 75 385 C77 375 76 360 74 345 Z" fill="#1e293b" stroke="#334155" />
                 <!-- Right Hand (anatomical left) -->
-                <path d="M254 345 C256 360 258 375 254 385 C251 392 247 392 245 385 C243 375 244 360 246 345 Z" class="fill-slate-800 stroke-slate-700" />
+                <path d="M254 345 C256 360 258 375 254 385 C251 392 247 392 245 385 C243 375 244 360 246 345 Z" fill="#1e293b" stroke="#334155" />
 
                 <!-- Feet -->
-                <path d="M120 580 L115 605 Q125 612 135 605 L132 580 Z" class="fill-slate-800 stroke-slate-700" />
-                <path d="M200 580 L205 605 Q195 612 185 605 L188 580 Z" class="fill-slate-800 stroke-slate-700" />
+                <path d="M120 580 L115 605 Q125 612 135 605 L132 580 Z" fill="#1e293b" stroke="#334155" />
+                <path d="M200 580 L205 605 Q195 612 185 605 L188 580 Z" fill="#1e293b" stroke="#334155" />
                 
                 <!-- Knees Base -->
-                <circle cx="128" cy="460" r="10" class="fill-slate-800/90 stroke-slate-700/80" />
-                <circle cx="192" cy="460" r="10" class="fill-slate-800/90 stroke-slate-700/80" />
+                <circle cx="128" cy="460" r="10" fill="#1e293b" stroke="#334155" />
+                <circle cx="192" cy="460" r="10" fill="#1e293b" stroke="#334155" />
             </g>
 
             <!-- Interactive Muscle Segments -->
-            <g class="muscle-segments">
+            <g class="muscle-segments" fill="#334155" stroke="#1e293b" stroke-width="1.2">
                 <!-- 1. FRONT DELTOIDS (ไหล่หน้า/ข้าง) -->
                 <!-- Left Deltoid -->
                 <path id="front-left-deltoid" data-muscle="front-deltoids" class="muscle-part cursor-pointer transition-all duration-200"
@@ -132,25 +132,25 @@ const BodySVG = {
             </defs>
 
             <!-- Base Body Outline (Back) -->
-            <g class="body-base fill-slate-800/80 stroke-slate-700/60" stroke-width="1.5">
+            <g class="body-base" fill="#1e293b" stroke="#334155" stroke-width="1.5">
                 <!-- Head & Neck Back -->
-                <ellipse cx="160" cy="45" rx="26" ry="32" class="fill-slate-800 stroke-slate-700" />
+                <ellipse cx="160" cy="45" rx="26" ry="32" fill="#1e293b" stroke="#334155" />
                 
                 <!-- Hands Back -->
-                <path d="M66 345 C64 360 62 375 66 385 C69 392 73 392 75 385 C77 375 76 360 74 345 Z" class="fill-slate-800 stroke-slate-700" />
-                <path d="M254 345 C256 360 258 375 254 385 C251 392 247 392 245 385 C243 375 244 360 246 345 Z" class="fill-slate-800 stroke-slate-700" />
+                <path d="M66 345 C64 360 62 375 66 385 C69 392 73 392 75 385 C77 375 76 360 74 345 Z" fill="#1e293b" stroke="#334155" />
+                <path d="M254 345 C256 360 258 375 254 385 C251 392 247 392 245 385 C243 375 244 360 246 345 Z" fill="#1e293b" stroke="#334155" />
 
                 <!-- Feet Back -->
-                <path d="M120 580 L115 605 Q125 612 135 605 L132 580 Z" class="fill-slate-800 stroke-slate-700" />
-                <path d="M200 580 L205 605 Q195 612 185 605 L188 580 Z" class="fill-slate-800 stroke-slate-700" />
+                <path d="M120 580 L115 605 Q125 612 135 605 L132 580 Z" fill="#1e293b" stroke="#334155" />
+                <path d="M200 580 L205 605 Q195 612 185 605 L188 580 Z" fill="#1e293b" stroke="#334155" />
 
                 <!-- Knee Backs -->
-                <circle cx="128" cy="460" r="8" class="fill-slate-800/90 stroke-slate-700/80" />
-                <circle cx="192" cy="460" r="8" class="fill-slate-800/90 stroke-slate-700/80" />
+                <circle cx="128" cy="460" r="8" fill="#1e293b" stroke="#334155" />
+                <circle cx="192" cy="460" r="8" fill="#1e293b" stroke="#334155" />
             </g>
 
             <!-- Interactive Muscle Segments (Back) -->
-            <g class="muscle-segments">
+            <g class="muscle-segments" fill="#334155" stroke="#1e293b" stroke-width="1.2">
                 <!-- 1. TRAPEZIUS (สะบัก / หนอกคอ) -->
                 <path id="back-traps" data-muscle="trapezius" class="muscle-part cursor-pointer transition-all duration-200"
                     d="M148 76 C155 76 165 76 172 76 C176 92 195 104 212 108 C198 122 180 142 160 178 C140 142 122 122 108 108 C125 104 144 92 148 76 Z" />
