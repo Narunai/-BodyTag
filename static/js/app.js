@@ -101,40 +101,71 @@ function initAuth() {
     const authPasscode = document.getElementById('auth-passcode');
     const authError = document.getElementById('auth-error-msg');
     const lockBtn = document.getElementById('btn-lock-app');
+    const togglePwdBtn = document.getElementById('btn-toggle-pwd');
 
-    const token = localStorage.getItem('bodytag_auth_token');
-    if (token === AUTH_PASSCODE) {
-        if (authGate) authGate.classList.add('hidden');
+    if (togglePwdBtn && authPasscode) {
+        togglePwdBtn.addEventListener('click', () => {
+            if (authPasscode.type === 'password') {
+                authPasscode.type = 'text';
+                togglePwdBtn.textContent = '🙈';
+            } else {
+                authPasscode.type = 'password';
+                togglePwdBtn.textContent = '👁️';
+            }
+        });
+    }
+
+    function unlockGate() {
+        if (authGate) {
+            authGate.style.display = 'none';
+            authGate.classList.add('hidden');
+            authGate.classList.remove('flex');
+        }
+        if (authError) authError.classList.add('hidden');
         initializeApp();
+    }
+
+    function lockGate() {
+        localStorage.removeItem('bodytag_auth_token');
+        if (authPasscode) {
+            authPasscode.value = '';
+            authPasscode.focus();
+        }
+        if (authError) authError.classList.add('hidden');
+        if (authGate) {
+            authGate.style.display = 'flex';
+            authGate.classList.remove('hidden');
+            authGate.classList.add('flex');
+        }
+    }
+
+    const savedToken = localStorage.getItem('bodytag_auth_token');
+    if (savedToken && savedToken.trim().toLowerCase() === AUTH_PASSCODE.toLowerCase()) {
+        unlockGate();
     } else {
-        if (authGate) authGate.classList.remove('hidden');
-        if (authPasscode) authPasscode.focus();
+        lockGate();
     }
 
     if (authForm) {
         authForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const val = authPasscode.value.trim();
-            if (val === AUTH_PASSCODE) {
+            const val = (authPasscode ? authPasscode.value : '').trim().toLowerCase();
+            if (val === AUTH_PASSCODE.toLowerCase()) {
                 localStorage.setItem('bodytag_auth_token', AUTH_PASSCODE);
-                if (authError) authError.classList.add('hidden');
-                if (authGate) authGate.classList.add('hidden');
-                initializeApp();
+                unlockGate();
             } else {
                 if (authError) authError.classList.remove('hidden');
-                authPasscode.classList.add('animate-shake');
-                setTimeout(() => authPasscode.classList.remove('animate-shake'), 400);
+                if (authPasscode) {
+                    authPasscode.classList.add('animate-shake');
+                    setTimeout(() => authPasscode.classList.remove('animate-shake'), 400);
+                }
             }
         });
     }
 
     if (lockBtn) {
         lockBtn.addEventListener('click', () => {
-            localStorage.removeItem('bodytag_auth_token');
-            if (authPasscode) authPasscode.value = '';
-            if (authError) authError.classList.add('hidden');
-            if (authGate) authGate.classList.remove('hidden');
-            if (authPasscode) authPasscode.focus();
+            lockGate();
         });
     }
 }
@@ -318,12 +349,33 @@ async function dbGetWeeksWithDays() {
         }
     }
 
-    try {
-        const res = await fetch('/api/weeks');
-        if (res.ok) return await res.json();
-    } catch (_) {}
-
-    return [];
+    // Default initial template so UI is always interactive
+    return [
+        {
+            id: 1,
+            week_number: 1,
+            title: "สัปดาห์ที่ 1",
+            created_at: new Date().toISOString(),
+            total_days: 1,
+            total_sets: 0,
+            total_volume_kg: 0,
+            days: [
+                {
+                    id: 1,
+                    week_id: 1,
+                    day_number: 1,
+                    title: "วันที่ 1",
+                    real_date: new Date().toISOString().split('T')[0],
+                    notes: "วันฝึกแรก",
+                    created_at: new Date().toISOString(),
+                    total_sets: 0,
+                    total_volume_kg: 0,
+                    exercises_count: 0,
+                    muscles_trained: []
+                }
+            ]
+        }
+    ];
 }
 
 async function dbAddWeek(title) {
