@@ -182,6 +182,7 @@ async function initializeApp() {
     await loadExercises();
     await loadWeeksAndInit();
 }
+window.initializeApp = initializeApp;
 
 // --- Data Operations (Supabase Cloud + Local Fallback) ---
 

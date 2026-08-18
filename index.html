@@ -57,9 +57,10 @@
                 </h2>
                 <p class="text-xs text-slate-400 mt-1">กรุณากรอกรหัสผ่านเพื่อเข้าใช้งาน</p>
             </div>
-            <form id="auth-form" class="space-y-4">
+            <form id="auth-form" class="space-y-4" onsubmit="event.preventDefault(); if(window.handleAuthSubmit) window.handleAuthSubmit(); return false;">
                 <div class="relative">
                     <input type="password" id="auth-passcode" placeholder="กรอกรหัสผ่าน..." required autocomplete="current-password"
+                           onkeydown="if(event.key === 'Enter'){ event.preventDefault(); if(window.handleAuthSubmit) window.handleAuthSubmit(); }"
                            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-10 py-3 text-center text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition font-mono tracking-widest">
                     <button type="button" id="btn-toggle-pwd" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm">
                         👁️
@@ -68,12 +69,47 @@
                 <div id="auth-error-msg" class="text-xs text-rose-400 font-semibold hidden">
                     ❌ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง
                 </div>
-                <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 font-bold text-sm text-white shadow-lg shadow-sky-500/20 transition">
+                <button type="button" id="auth-submit-btn" onclick="if(window.handleAuthSubmit) window.handleAuthSubmit();" class="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 font-bold text-sm text-white shadow-lg shadow-sky-500/20 transition cursor-pointer">
                     🔓 ปลดล็อคเข้าสู่ระบบ
                 </button>
             </form>
         </div>
     </div>
+    <script>
+        window.AUTH_PASSCODE = 'narunai141214';
+        window.handleAuthSubmit = function() {
+            var input = document.getElementById('auth-passcode');
+            var err = document.getElementById('auth-error-msg');
+            var gate = document.getElementById('auth-gate');
+            if (!input) return;
+            var val = (input.value || '').trim().toLowerCase();
+            if (val === window.AUTH_PASSCODE.toLowerCase()) {
+                localStorage.setItem('bodytag_auth_token', window.AUTH_PASSCODE);
+                if (err) err.classList.add('hidden');
+                if (gate) {
+                    gate.style.setProperty('display', 'none', 'important');
+                    gate.classList.add('hidden');
+                }
+                if (typeof window.initializeApp === 'function') {
+                    window.initializeApp();
+                }
+            } else {
+                if (err) err.classList.remove('hidden');
+                input.classList.add('animate-shake');
+                setTimeout(function() { input.classList.remove('animate-shake'); }, 400);
+            }
+        };
+        // Auto unlock if already authenticated
+        if (localStorage.getItem('bodytag_auth_token') === window.AUTH_PASSCODE) {
+            document.addEventListener('DOMContentLoaded', function() {
+                var gate = document.getElementById('auth-gate');
+                if (gate) {
+                    gate.style.setProperty('display', 'none', 'important');
+                    gate.classList.add('hidden');
+                }
+            });
+        }
+    </script>
 
     <!-- Top Navigation Bar -->
     <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-md sticky top-0 z-40">
