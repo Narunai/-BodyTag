@@ -1,6 +1,7 @@
-# Environment variables
+# Environment variables & Passwords
 .env
 .env.local
+password.txt
 
 # Python
 __pycache__/

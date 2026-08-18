@@ -1,51 +1,722 @@
 /**
  * BodyTag - Muscle Tracker & Anatomy Heatmap Frontend App
- * Supports Weekly Tracking, Custom Dynamic Days, Real-Date Reference, and Scope Isolation
+ * Supports GitHub Pages, Passcode Authentication ('narunai141214'), Supabase Cloud DB, and Weekly/Daily Scopes
  */
+
+const AUTH_PASSCODE = 'narunai141214';
+const SUPABASE_URL = 'https://vyajillnaxlbkzkbbznq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_NoVKvs7RVPjP3sqLyNDsGw_15pineww';
+
+// Initialize Supabase JS Client if loaded
+let supabase = null;
+if (window.supabase && typeof window.supabase.createClient === 'function') {
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+        console.warn('Supabase client initialization note:', e);
+    }
+}
+
+// Built-in Exercises & Muscle Metadata (Runs standalone on GitHub Pages)
+const INITIAL_EXERCISES = [
+    { id: "bench_press", name: "Barbell Bench Press", name_th: "เบนช์เพรส บาร์เบล", category: "Chest", primary: ["chest"], secondary: ["triceps", "front-deltoids"] },
+    { id: "incline_dumbbell_press", name: "Incline Dumbbell Press", name_th: "ดัมเบลเพรส อกบน", category: "Chest", primary: ["chest", "front-deltoids"], secondary: ["triceps"] },
+    { id: "chest_fly", name: "Cable / Dumbbell Fly", name_th: "เคเบิล / ดัมเบล ฟลาย", category: "Chest", primary: ["chest"], secondary: ["front-deltoids"] },
+    { id: "dips", name: "Chest Dips", name_th: "ดิปส์ (อก/หลังแขน)", category: "Chest", primary: ["chest", "triceps"], secondary: ["front-deltoids"] },
+    { id: "pushups", name: "Push Ups", name_th: "วิดพื้น", category: "Chest", primary: ["chest"], secondary: ["triceps", "front-deltoids", "abs"] },
+    { id: "pullup", name: "Pull Up / Chin Up", name_th: "ดึงข้อ (Pull Up)", category: "Back", primary: ["upper-back"], secondary: ["biceps", "forearms", "trapezius"] },
+    { id: "lat_pulldown", name: "Lat Pulldown", name_th: "ดึงปีกหลัง (Lat Pulldown)", category: "Back", primary: ["upper-back"], secondary: ["biceps", "forearms"] },
+    { id: "barbell_row", name: "Barbell Bent-Over Row", name_th: "ก้มดึงบาร์เบล (Barbell Row)", category: "Back", primary: ["upper-back", "trapezius"], secondary: ["biceps", "lower-back", "forearms"] },
+    { id: "deadlift", name: "Conventional Deadlift", name_th: "เดดลิฟต์ (Deadlift)", category: "Back", primary: ["lower-back", "gluteal", "hamstrings"], secondary: ["trapezius", "upper-back", "forearms", "quadriceps"] },
+    { id: "seated_cable_row", name: "Seated Cable Row", name_th: "ดึงเคเบิลท่านั่ง (Seated Row)", category: "Back", primary: ["upper-back", "trapezius"], secondary: ["biceps", "forearms"] },
+    { id: "face_pull", name: "Cable Face Pull", name_th: "เฟสพูล เคเบิล (Face Pull)", category: "Back", primary: ["back-deltoids", "trapezius"], secondary: ["upper-back"] },
+    { id: "overhead_press", name: "Overhead Shoulder Press", name_th: "โอเวอร์เฮดเพรส บาร์เบล", category: "Shoulders", primary: ["front-deltoids"], secondary: ["triceps", "trapezius", "abs"] },
+    { id: "lateral_raise", name: "Dumbbell Lateral Raise", name_th: "กางแขนข้างดัมเบล (ไหล่ข้าง)", category: "Shoulders", primary: ["front-deltoids"], secondary: ["trapezius"] },
+    { id: "arnold_press", name: "Arnold Press", name_th: "อาร์โนลด์ เพรส", category: "Shoulders", primary: ["front-deltoids"], secondary: ["triceps", "trapezius"] },
+    { id: "rear_delt_fly", name: "Rear Delt Fly", name_th: "กางแขนหลัง (ไหล่หลัง)", category: "Shoulders", primary: ["back-deltoids"], secondary: ["trapezius", "upper-back"] },
+    { id: "shrugs", name: "Barbell / Dumbbell Shrugs", name_th: "ยักไหล่ (Shrugs)", category: "Shoulders", primary: ["trapezius"], secondary: ["forearms"] },
+    { id: "squat", name: "Barbell Back Squat", name_th: "สควอท บาร์เบล", category: "Legs", primary: ["quadriceps", "gluteal"], secondary: ["hamstrings", "calves", "lower-back", "abs"] },
+    { id: "front_squat", name: "Front Squat", name_th: "ฟรอนต์ สควอท", category: "Legs", primary: ["quadriceps"], secondary: ["gluteal", "abs", "calves"] },
+    { id: "romanian_deadlift", name: "Romanian Deadlift (RDL)", name_th: "โรมาเนียน เดดลิฟต์ (RDL)", category: "Legs", primary: ["hamstrings", "gluteal"], secondary: ["lower-back", "forearms"] },
+    { id: "leg_press", name: "Leg Press", name_th: "เลกเพรส (Leg Press)", category: "Legs", primary: ["quadriceps", "gluteal"], secondary: ["hamstrings", "calves"] },
+    { id: "lunges", name: "Walking Lunges", name_th: "ลันจ์ ดัมเบล (Lunges)", category: "Legs", primary: ["quadriceps", "gluteal"], secondary: ["hamstrings", "calves"] },
+    { id: "leg_extension", name: "Leg Extension", name_th: "เตะขาหน้า (Leg Extension)", category: "Legs", primary: ["quadriceps"], secondary: [] },
+    { id: "hamstring_curl", name: "Lying / Seated Leg Curl", name_th: "พับขาหลัง (Leg Curl)", category: "Legs", primary: ["hamstrings"], secondary: ["calves"] },
+    { id: "calf_raise", name: "Standing Calf Raise", name_th: "เขย่งน่อง (Calf Raise)", category: "Legs", primary: ["calves"], secondary: ["tibialis"] },
+    { id: "hip_thrust", name: "Barbell Hip Thrust", name_th: "ฮิปทรัสต์ (Hip Thrust)", category: "Legs", primary: ["gluteal"], secondary: ["hamstrings", "quadriceps"] },
+    { id: "bicep_curl", name: "Barbell Bicep Curl", name_th: "ยกหน้าแขน บาร์เบล", category: "Arms", primary: ["biceps"], secondary: ["forearms"] },
+    { id: "hammer_curl", name: "Dumbbell Hammer Curl", name_th: "แฮมเมอร์ เคิร์ล ดัมเบล", category: "Arms", primary: ["biceps", "forearms"], secondary: [] },
+    { id: "tricep_pushdown", name: "Cable Tricep Pushdown", name_th: "กดหลังแขน เคเบิล", category: "Arms", primary: ["triceps"], secondary: [] },
+    { id: "skull_crushers", name: "Skull Crushers (EZ Bar)", name_th: "สคัล ครัชเชอร์ (หลังแขน)", category: "Arms", primary: ["triceps"], secondary: ["forearms"] },
+    { id: "preacher_curl", name: "Preacher Curl", name_th: "พรีเชอร์ เคิร์ล", category: "Arms", primary: ["biceps"], secondary: ["forearms"] },
+    { id: "plank", name: "Standard Plank", name_th: "แพลงก์ (Plank)", category: "Core", primary: ["abs"], secondary: ["obliques", "lower-back", "front-deltoids"] },
+    { id: "hanging_leg_raise", name: "Hanging Leg Raise", name_th: "โหนบาร์ยกขา (ท้องล่าง)", category: "Core", primary: ["abs"], secondary: ["obliques", "forearms"] },
+    { id: "cable_woodchopper", name: "Cable Woodchopper / Russian Twist", name_th: "วูดชอปเปอร์ / รัสเซียนทวิสต์", category: "Core", primary: ["obliques"], secondary: ["abs"] },
+    { id: "ab_crunch", name: "Cable / Floor Crunch", name_th: "ครันช์ หน้าท้อง", category: "Core", primary: ["abs"], secondary: [] }
+];
+
+const MUSCLE_METADATA = {
+    "chest": { name_en: "Chest (Pectorals)", name_th: "กล้ามเนื้อหน้าอก", view: "anterior", mev: 8, mav: 14, mrv: 22 },
+    "front-deltoids": { name_en: "Front Shoulders", name_th: "กล้ามเนื้อหัวไหล่หน้า/ข้าง", view: "anterior", mev: 6, mav: 12, mrv: 20 },
+    "back-deltoids": { name_en: "Rear Shoulders", name_th: "กล้ามเนื้อหัวไหล่หลัง", view: "posterior", mev: 6, mav: 12, mrv: 20 },
+    "biceps": { name_en: "Biceps", name_th: "กล้ามเนื้อต้นแขนด้านหน้า", view: "anterior", mev: 8, mav: 14, mrv: 20 },
+    "triceps": { name_en: "Triceps", name_th: "กล้ามเนื้อต้นแขนด้านหลัง", view: "both", mev: 6, mav: 12, mrv: 18 },
+    "forearms": { name_en: "Forearms", name_th: "กล้ามเนื้อปลายแขน", view: "both", mev: 4, mav: 10, mrv: 16 },
+    "abs": { name_en: "Abdominals", name_th: "กล้ามเนื้อหน้าท้อง", view: "anterior", mev: 6, mav: 12, mrv: 20 },
+    "obliques": { name_en: "Obliques", name_th: "กล้ามเนื้อหน้าท้องด้านข้าง", view: "anterior", mev: 4, mav: 8, mrv: 14 },
+    "trapezius": { name_en: "Trapezius (Traps)", name_th: "กล้ามเนื้อสะบัก / หนอกคอ", view: "posterior", mev: 4, mav: 10, mrv: 18 },
+    "upper-back": { name_en: "Upper Back / Lats", name_th: "กล้ามเนื้อหลังส่วนบน / ปีก", view: "posterior", mev: 8, mav: 14, mrv: 22 },
+    "lower-back": { name_en: "Lower Back (Erectors)", name_th: "กล้ามเนื้อหลังส่วนล่าง", view: "posterior", mev: 4, mav: 8, mrv: 14 },
+    "gluteal": { name_en: "Glutes", name_th: "กล้ามเนื้อก้น / สะโพก", view: "posterior", mev: 4, mav: 12, mrv: 18 },
+    "quadriceps": { name_en: "Quadriceps (Quads)", name_th: "กล้ามเนื้อต้นขาด้านหน้า", view: "anterior", mev: 8, mav: 14, mrv: 22 },
+    "hamstrings": { name_en: "Hamstrings", name_th: "กล้ามเนื้อต้นขาด้านหลัง", view: "posterior", mev: 6, mav: 12, mrv: 18 },
+    "calves": { name_en: "Calves", name_th: "กล้ามเนื้อน่อง", view: "both", mev: 6, mav: 12, mrv: 20 },
+    "tibialis": { name_en: "Tibialis", name_th: "กล้ามเนื้อหน้าแข้ง", view: "anterior", mev: 2, mav: 6, mrv: 10 }
+};
 
 const AppState = {
     weeks: [],
     selectedWeekId: null,
-    selectedDayId: null,     // null = Full Week scope; number = Specific Day scope
-    logTargetDayId: null,    // The day where newly logged workouts go
+    selectedDayId: null,
+    logTargetDayId: null,
     exercises: [],
     logs: [],
     stats: { muscles: {}, summary: {} },
-    currentView: 'anterior', // 'anterior' | 'posterior' | 'dual'
-    colorMode: 'heatmap',    // 'heatmap' | 'recovery' | 'landmarks'
+    currentView: 'anterior',
+    colorMode: 'heatmap',
     selectedCategory: 'all',
     selectedExerciseId: '',
     selectedMuscleKey: null,
+    isInitialized: false
 };
 
-// Initialize App
-document.addEventListener('DOMContentLoaded', async () => {
+// Document Ready & Auth Check
+document.addEventListener('DOMContentLoaded', () => {
+    initAuth();
+});
+
+function initAuth() {
+    const authGate = document.getElementById('auth-gate');
+    const authForm = document.getElementById('auth-form');
+    const authPasscode = document.getElementById('auth-passcode');
+    const authError = document.getElementById('auth-error-msg');
+    const lockBtn = document.getElementById('btn-lock-app');
+
+    const token = localStorage.getItem('bodytag_auth_token');
+    if (token === AUTH_PASSCODE) {
+        if (authGate) authGate.classList.add('hidden');
+        initializeApp();
+    } else {
+        if (authGate) authGate.classList.remove('hidden');
+        if (authPasscode) authPasscode.focus();
+    }
+
+    if (authForm) {
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = authPasscode.value.trim();
+            if (val === AUTH_PASSCODE) {
+                localStorage.setItem('bodytag_auth_token', AUTH_PASSCODE);
+                if (authError) authError.classList.add('hidden');
+                if (authGate) authGate.classList.add('hidden');
+                initializeApp();
+            } else {
+                if (authError) authError.classList.remove('hidden');
+                authPasscode.classList.add('animate-shake');
+                setTimeout(() => authPasscode.classList.remove('animate-shake'), 400);
+            }
+        });
+    }
+
+    if (lockBtn) {
+        lockBtn.addEventListener('click', () => {
+            localStorage.removeItem('bodytag_auth_token');
+            if (authPasscode) authPasscode.value = '';
+            if (authError) authError.classList.add('hidden');
+            if (authGate) authGate.classList.remove('hidden');
+            if (authPasscode) authPasscode.focus();
+        });
+    }
+}
+
+async function initializeApp() {
+    if (AppState.isInitialized) return;
+    AppState.isInitialized = true;
+
     initViewControls();
     initFormControls();
     initModalControls();
     initWeekAndDayControls();
-    
-    // Load initial exercises and weeks hierarchy
+
     await loadExercises();
     await loadWeeksAndInit();
-});
+}
 
-// --- Weeks & Days Data Loading & Setup ---
+// --- Data Operations (Supabase Cloud + Local Fallback) ---
+
+async function dbGetExercises() {
+    if (supabase) {
+        try {
+            const { data, error } = await supabase.from('exercises').select('*').order('category').order('name');
+            if (!error && data && data.length > 0) {
+                return data.map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    name_th: r.name_th || r.name,
+                    category: r.category,
+                    primary: typeof r.primary_muscles === 'string' ? JSON.parse(r.primary_muscles) : r.primary_muscles,
+                    secondary: typeof r.secondary_muscles === 'string' ? JSON.parse(r.secondary_muscles) : r.secondary_muscles,
+                    is_custom: Boolean(r.is_custom)
+                }));
+            }
+        } catch (e) {
+            console.warn('Supabase get exercises fallback:', e);
+        }
+    }
+    // Fallback to local server API or built-in list
+    try {
+        const res = await fetch('/api/exercises');
+        if (res.ok) return await res.json();
+    } catch (_) {}
+    return INITIAL_EXERCISES;
+}
+
+async function dbAddExercise(exDict) {
+    if (supabase) {
+        try {
+            await supabase.from('exercises').insert({
+                id: exDict.id,
+                name: exDict.name,
+                name_th: exDict.name_th || exDict.name,
+                category: exDict.category || 'Custom',
+                primary_muscles: JSON.stringify(exDict.primary || []),
+                secondary_muscles: JSON.stringify(exDict.secondary || []),
+                is_custom: 1
+            });
+        } catch (e) {
+            console.warn('Supabase add exercise note:', e);
+        }
+    }
+    try {
+        await fetch('/api/exercises', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(exDict)
+        });
+    } catch (_) {}
+    return exDict;
+}
+
+async function dbGetWeeksWithDays() {
+    if (supabase) {
+        try {
+            const [wRes, dRes, lRes] = await Promise.all([
+                supabase.from('workout_weeks').select('*').order('week_number', { ascending: true }),
+                supabase.from('workout_days').select('*').order('day_number', { ascending: true }),
+                supabase.from('workout_logs').select('*, exercises(*)')
+            ]);
+
+            if (!wRes.error && wRes.data) {
+                // If weeks is empty on cloud, auto create Week 1 and Day 1
+                if (wRes.data.length === 0) {
+                    const { data: newW } = await supabase.from('workout_weeks').insert({ week_number: 1, title: 'สัปดาห์ที่ 1' }).select();
+                    if (newW && newW.length > 0) {
+                        await supabase.from('workout_days').insert({
+                            week_id: newW[0].id,
+                            day_number: 1,
+                            title: 'วันที่ 1',
+                            real_date: new Date().toISOString().split('T')[0],
+                            notes: 'วันฝึกแรก'
+                        });
+                        return await dbGetWeeksWithDays();
+                    }
+                }
+
+                const logsByDay = {};
+                (lRes.data || []).forEach(l => {
+                    const dayId = l.day_id;
+                    if (!dayId) return;
+                    if (!logsByDay[dayId]) logsByDay[dayId] = [];
+                    const ex = l.exercises || {};
+                    const pri = typeof ex.primary_muscles === 'string' ? JSON.parse(ex.primary_muscles || '[]') : (ex.primary_muscles || []);
+                    const sec = typeof ex.secondary_muscles === 'string' ? JSON.parse(ex.secondary_muscles || '[]') : (ex.secondary_muscles || []);
+                    logsByDay[dayId].push({
+                        sets: l.sets,
+                        reps: l.reps || 10,
+                        weight: l.weight || 0,
+                        primary: pri,
+                        secondary: sec,
+                        ex_name: ex.name || '',
+                        ex_name_th: ex.name_th || ex.name || ''
+                    });
+                });
+
+                const daysByWeek = {};
+                (dRes.data || []).forEach(dr => {
+                    const wId = dr.week_id;
+                    const dId = dr.id;
+                    const dayLogs = logsByDay[dId] || [];
+
+                    const muscleCounts = {};
+                    let daySets = 0;
+                    let dayVolume = 0.0;
+
+                    dayLogs.forEach(dl => {
+                        const s = dl.sets;
+                        daySets += s;
+                        dayVolume += s * dl.reps * dl.weight;
+                        dl.primary.forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + s; });
+                        dl.secondary.forEach(m => { muscleCounts[m] = (muscleCounts[m] || 0) + (s * 0.5); });
+                    });
+
+                    const musclesTrained = Object.entries(muscleCounts)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([mKey, count]) => {
+                            const meta = MUSCLE_METADATA[mKey] || {};
+                            return {
+                                key: mKey,
+                                name_th: meta.name_th || mKey,
+                                name_en: meta.name_en || mKey,
+                                sets: Math.round(count * 10) / 10
+                            };
+                        });
+
+                    if (!daysByWeek[wId]) daysByWeek[wId] = [];
+                    daysByWeek[wId].push({
+                        id: dId,
+                        week_id: wId,
+                        day_number: dr.day_number,
+                        title: dr.title,
+                        real_date: dr.real_date || '',
+                        notes: dr.notes || '',
+                        created_at: dr.created_at || '',
+                        total_sets: daySets,
+                        total_volume_kg: Math.round(dayVolume * 10) / 10,
+                        exercises_count: dayLogs.length,
+                        muscles_trained: musclesTrained
+                    });
+                });
+
+                return wRes.data.map(wr => {
+                    const days = daysByWeek[wr.id] || [];
+                    const weekSets = days.reduce((sum, d) => sum + d.total_sets, 0);
+                    const weekVolume = days.reduce((sum, d) => sum + d.total_volume_kg, 0);
+                    return {
+                        id: wr.id,
+                        week_number: wr.week_number,
+                        title: wr.title,
+                        created_at: wr.created_at || '',
+                        total_days: days.length,
+                        total_sets: weekSets,
+                        total_volume_kg: Math.round(weekVolume * 10) / 10,
+                        days: days
+                    };
+                });
+            }
+        } catch (e) {
+            console.warn('Supabase get weeks fallback:', e);
+        }
+    }
+
+    try {
+        const res = await fetch('/api/weeks');
+        if (res.ok) return await res.json();
+    } catch (_) {}
+
+    return [];
+}
+
+async function dbAddWeek(title) {
+    if (supabase) {
+        try {
+            const { data: latest } = await supabase.from('workout_weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
+            const nextNum = (latest && latest[0]) ? latest[0].week_number + 1 : 1;
+            const weekTitle = title && title.trim() ? title.trim() : `สัปดาห์ที่ ${nextNum}`;
+            const { data: newW } = await supabase.from('workout_weeks').insert({ week_number: nextNum, title: weekTitle }).select();
+            if (newW && newW.length > 0) {
+                await supabase.from('workout_days').insert({
+                    week_id: newW[0].id,
+                    day_number: 1,
+                    title: 'วันที่ 1',
+                    real_date: new Date().toISOString().split('T')[0],
+                    notes: ''
+                });
+                return newW[0];
+            }
+        } catch (e) {
+            console.warn('Supabase add week note:', e);
+        }
+    }
+    try {
+        const res = await fetch('/api/weeks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+        });
+        if (res.ok) return await res.json();
+    } catch (_) {}
+}
+
+async function dbDeleteWeek(weekId) {
+    if (supabase) {
+        try {
+            await supabase.from('workout_weeks').delete().eq('id', weekId);
+        } catch (e) {
+            console.warn('Supabase delete week note:', e);
+        }
+    }
+    try {
+        await fetch(`/api/weeks/${weekId}`, { method: 'DELETE' });
+    } catch (_) {}
+}
+
+async function dbAddDay(weekId, title, realDate, notes) {
+    const dateVal = realDate || new Date().toISOString().split('T')[0];
+    if (supabase) {
+        try {
+            const { data: latest } = await supabase.from('workout_days').select('day_number').eq('week_id', weekId).order('day_number', { ascending: false }).limit(1);
+            const nextNum = (latest && latest[0]) ? latest[0].day_number + 1 : 1;
+            const dayTitle = title && title.trim() ? title.trim() : `วันที่ ${nextNum}`;
+            const { data: newD } = await supabase.from('workout_days').insert({
+                week_id: weekId,
+                day_number: nextNum,
+                title: dayTitle,
+                real_date: dateVal,
+                notes: notes || ''
+            }).select();
+            if (newD && newD.length > 0) return newD[0];
+        } catch (e) {
+            console.warn('Supabase add day note:', e);
+        }
+    }
+    try {
+        const res = await fetch('/api/days', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ week_id: weekId, title, real_date: dateVal, notes })
+        });
+        if (res.ok) return await res.json();
+    } catch (_) {}
+}
+
+async function dbUpdateDay(dayId, title, realDate, notes) {
+    if (supabase) {
+        try {
+            await supabase.from('workout_days').update({ title, real_date: realDate, notes }).eq('id', dayId);
+        } catch (e) {
+            console.warn('Supabase update day note:', e);
+        }
+    }
+    try {
+        await fetch(`/api/days/${dayId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, real_date: realDate, notes })
+        });
+    } catch (_) {}
+}
+
+async function dbDeleteDay(dayId) {
+    if (supabase) {
+        try {
+            await supabase.from('workout_days').delete().eq('id', dayId);
+        } catch (e) {
+            console.warn('Supabase delete day note:', e);
+        }
+    }
+    try {
+        await fetch(`/api/days/${dayId}`, { method: 'DELETE' });
+    } catch (_) {}
+}
+
+async function dbGetLogs(weekId, dayId) {
+    if (supabase) {
+        try {
+            let query = supabase.from('workout_logs').select('*, exercises(*), workout_days(*, workout_weeks(*))');
+            if (dayId !== null && dayId !== undefined) {
+                query = query.eq('day_id', dayId);
+            }
+            const { data, error } = await query.order('logged_at', { ascending: false }).limit(200);
+            if (!error && data) {
+                const results = [];
+                data.forEach(r => {
+                    const ex = r.exercises || {};
+                    const d = r.workout_days || {};
+                    const w = d.workout_weeks || {};
+                    if (weekId !== null && weekId !== undefined && d.week_id !== weekId) return;
+
+                    const pri = typeof ex.primary_muscles === 'string' ? JSON.parse(ex.primary_muscles || '[]') : (ex.primary_muscles || []);
+                    const sec = typeof ex.secondary_muscles === 'string' ? JSON.parse(ex.secondary_muscles || '[]') : (ex.secondary_muscles || []);
+
+                    results.push({
+                        id: r.id,
+                        day_id: r.day_id,
+                        week_id: d.week_id,
+                        day_title: d.title || 'ไม่ระบุวัน',
+                        day_real_date: d.real_date || '',
+                        week_title: w.title || '',
+                        week_number: w.week_number,
+                        exercise_id: r.exercise_id,
+                        exercise_name: ex.name || '',
+                        exercise_name_th: ex.name_th || ex.name || '',
+                        category: ex.category || 'General',
+                        sets: r.sets,
+                        reps: r.reps || 10,
+                        weight: r.weight || 0,
+                        rpe: r.rpe || 8.0,
+                        notes: r.notes || '',
+                        logged_at: r.logged_at || '',
+                        primary: pri,
+                        secondary: sec
+                    });
+                });
+                return results;
+            }
+        } catch (e) {
+            console.warn('Supabase get logs fallback:', e);
+        }
+    }
+
+    try {
+        const weekParam = weekId ? `week_id=${weekId}` : '';
+        const dayParam = dayId ? `day_id=${dayId}` : '';
+        const query = [weekParam, dayParam].filter(Boolean).join('&');
+        const res = await fetch(`/api/logs${query ? '?' + query : ''}`);
+        if (res.ok) return await res.json();
+    } catch (_) {}
+    return [];
+}
+
+async function dbAddLog(logData) {
+    if (supabase) {
+        try {
+            const { data, error } = await supabase.from('workout_logs').insert({
+                day_id: logData.day_id,
+                exercise_id: logData.exercise_id,
+                sets: logData.sets,
+                reps: logData.reps,
+                weight: logData.weight,
+                rpe: logData.rpe,
+                notes: logData.notes || '',
+                logged_at: new Date().toISOString()
+            }).select();
+            if (!error && data) return data[0];
+        } catch (e) {
+            console.warn('Supabase add log note:', e);
+        }
+    }
+    try {
+        const res = await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(logData)
+        });
+        if (res.ok) return await res.json();
+    } catch (_) {}
+}
+
+async function dbDeleteLog(logId) {
+    if (supabase) {
+        try {
+            await supabase.from('workout_logs').delete().eq('id', logId);
+        } catch (e) {
+            console.warn('Supabase delete log note:', e);
+        }
+    }
+    try {
+        await fetch(`/api/logs/${logId}`, { method: 'DELETE' });
+    } catch (_) {}
+}
+
+async function dbResetLogs(weekId, dayId) {
+    if (supabase) {
+        try {
+            if (dayId !== null && dayId !== undefined) {
+                await supabase.from('workout_logs').delete().eq('day_id', dayId);
+            } else {
+                await supabase.from('workout_logs').delete().neq('id', 0);
+            }
+        } catch (e) {
+            console.warn('Supabase reset logs note:', e);
+        }
+    }
+    try {
+        const weekParam = weekId ? `week_id=${weekId}` : '';
+        const dayParam = dayId ? `day_id=${dayId}` : '';
+        const query = [weekParam, dayParam].filter(Boolean).join('&');
+        await fetch(`/api/logs/reset${query ? '?' + query : ''}`, { method: 'POST' });
+    } catch (_) {}
+}
+
+// Client-Side Calculation for Statistics, Volume Landmarks & Recovery
+function calculateScopedStats(logs, weekId, dayId) {
+    const now = new Date();
+    const muscleStats = {};
+
+    Object.entries(MUSCLE_METADATA).forEach(([muscleKey, meta]) => {
+        muscleStats[muscleKey] = {
+            key: muscleKey,
+            name_en: meta.name_en,
+            name_th: meta.name_th,
+            view: meta.view,
+            mev: meta.mev,
+            mav: meta.mav,
+            mrv: meta.mrv,
+            raw_sets: 0,
+            effective_volume: 0.0,
+            total_reps: 0,
+            total_tonnage_kg: 0.0,
+            last_worked_at: null,
+            hours_since_workout: null,
+            recovery_percent: 100,
+            recent_exercises: [],
+            heatmap_level: 0,
+            volume_status: "Resting",
+            volume_status_th: "ยังไม่ได้เล่น"
+        };
+    });
+
+    logs.forEach(log => {
+        let logDt;
+        try {
+            logDt = new Date(log.logged_at);
+            if (isNaN(logDt.getTime())) logDt = now;
+        } catch (_) {
+            logDt = now;
+        }
+
+        const hoursDiff = Math.max(0, (now.getTime() - logDt.getTime()) / 3600000);
+        const sets = log.sets || 0;
+        const reps = log.reps || 0;
+        const weight = log.weight || 0;
+        const exName = log.exercise_name_th || log.exercise_name || '';
+
+        (log.primary || []).forEach(m => {
+            if (muscleStats[m]) {
+                const st = muscleStats[m];
+                st.raw_sets += sets;
+                st.effective_volume += sets * 1.0;
+                st.total_reps += sets * reps;
+                st.total_tonnage_kg += sets * reps * weight;
+                if (!st.last_worked_at || logDt > new Date(st.last_worked_at)) {
+                    st.last_worked_at = log.logged_at;
+                    st.hours_since_workout = Math.round(hoursDiff * 10) / 10;
+                }
+                if (exName && !st.recent_exercises.includes(exName)) {
+                    st.recent_exercises.push(exName);
+                }
+            }
+        });
+
+        (log.secondary || []).forEach(m => {
+            if (muscleStats[m]) {
+                const st = muscleStats[m];
+                st.raw_sets += sets;
+                st.effective_volume += sets * 0.5;
+                st.total_reps += Math.floor(sets * reps * 0.5);
+                st.total_tonnage_kg += (sets * reps * weight) * 0.5;
+                if (!st.last_worked_at || logDt > new Date(st.last_worked_at)) {
+                    st.last_worked_at = log.logged_at;
+                    st.hours_since_workout = Math.round(hoursDiff * 10) / 10;
+                }
+                const secTag = `${exName} (มัดรอง)`;
+                if (exName && !st.recent_exercises.includes(secTag)) {
+                    st.recent_exercises.push(secTag);
+                }
+            }
+        });
+    });
+
+    Object.values(muscleStats).forEach(st => {
+        const effVol = st.effective_volume;
+
+        // Heatmap level
+        if (effVol <= 0) {
+            st.heatmap_level = 0;
+            st.heatmap_color = "#334155";
+        } else if (effVol <= 3) {
+            st.heatmap_level = 1;
+            st.heatmap_color = "#22c55e";
+        } else if (effVol <= 7) {
+            st.heatmap_level = 2;
+            st.heatmap_color = "#f59e0b";
+        } else if (effVol <= 12) {
+            st.heatmap_level = 3;
+            st.heatmap_color = "#f97316";
+        } else {
+            st.heatmap_level = 4;
+            st.heatmap_color = "#ef4444";
+        }
+
+        // Recovery decay
+        if (st.hours_since_workout !== null && effVol > 0) {
+            const fullRecoveryHours = Math.min(96.0, 36.0 + effVol * 3.0);
+            const hoursPassed = st.hours_since_workout;
+            const recPct = Math.min(100, Math.floor((hoursPassed / fullRecoveryHours) * 100));
+            st.recovery_percent = recPct;
+            st.recovery_hours_total = Math.round(fullRecoveryHours * 10) / 10;
+            st.hours_remaining = Math.max(0, Math.round((fullRecoveryHours - hoursPassed) * 10) / 10);
+        } else {
+            st.recovery_percent = 100;
+            st.recovery_hours_total = 0;
+            st.hours_remaining = 0;
+        }
+
+        // Volume status landmarks
+        if (effVol === 0) {
+            st.volume_status = "Resting";
+            st.volume_status_th = "ยังไม่ได้เล่น";
+        } else if (effVol < st.mev) {
+            st.volume_status = "Light / Maintenance";
+            st.volume_status_th = "คงสภาพ (< MEV)";
+        } else if (effVol <= st.mav) {
+            st.volume_status = "Optimal Growth (MAV)";
+            st.volume_status_th = "จุดโตสูงสุด (MEV-MAV)";
+        } else if (effVol <= st.mrv) {
+            st.volume_status = "High Volume (MAV-MRV)";
+            st.volume_status_th = "ปริมาณสูง (MAV-MRV)";
+        } else {
+            st.volume_status = "Overreaching (MRV+)";
+            st.volume_status_th = "เกินขีดจำกัด (> MRV)";
+        }
+
+        st.effective_volume = Math.round(st.effective_volume * 10) / 10;
+        st.total_tonnage_kg = Math.round(st.total_tonnage_kg * 10) / 10;
+    });
+
+    const totalSets = logs.reduce((sum, l) => sum + (l.sets || 0), 0);
+    const totalVolumeKg = logs.reduce((sum, l) => sum + ((l.sets || 0) * (l.reps || 0) * (l.weight || 0)), 0);
+
+    return {
+        muscles: muscleStats,
+        summary: {
+            total_logs: logs.length,
+            total_sets: totalSets,
+            total_volume_kg: Math.round(totalVolumeKg * 10) / 10,
+            active_muscle_count: Object.values(muscleStats).filter(m => m.effective_volume > 0).length,
+            scope: { week_id: weekId, day_id: dayId }
+        }
+    };
+}
+
+// --- Main App Logic & UI Rendering ---
+
+async function loadExercises() {
+    AppState.exercises = await dbGetExercises();
+    renderExerciseSelect();
+}
 
 async function loadWeeksAndInit() {
     try {
-        const res = await fetch('/api/weeks');
-        AppState.weeks = await res.json();
-        
+        AppState.weeks = await dbGetWeeksWithDays();
+
         if (AppState.weeks.length > 0) {
-            // Default to latest week or existing selected
             if (!AppState.selectedWeekId || !AppState.weeks.some(w => w.id === AppState.selectedWeekId)) {
                 AppState.selectedWeekId = AppState.weeks[AppState.weeks.length - 1].id;
             }
-            
+
             const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
             if (currentWeek && currentWeek.days.length > 0) {
-                // If previously selected day isn't in this week, reset or set target
                 if (AppState.selectedDayId && !currentWeek.days.some(d => d.id === AppState.selectedDayId)) {
                     AppState.selectedDayId = null;
                 }
@@ -69,22 +740,11 @@ async function loadWeeksAndInit() {
     }
 }
 
-// Refresh scoped logs, statistics, and UI components
 async function refreshScopedData() {
     try {
-        const weekParam = AppState.selectedWeekId ? `week_id=${AppState.selectedWeekId}` : '';
-        const dayParam = AppState.selectedDayId ? `day_id=${AppState.selectedDayId}` : '';
-        const query = [weekParam, dayParam].filter(Boolean).join('&');
-        const urlSuffix = query ? `?${query}` : '';
+        AppState.logs = await dbGetLogs(AppState.selectedWeekId, AppState.selectedDayId);
+        AppState.stats = calculateScopedStats(AppState.logs, AppState.selectedWeekId, AppState.selectedDayId);
 
-        const [statsRes, logsRes] = await Promise.all([
-            fetch(`/api/stats${urlSuffix}`),
-            fetch(`/api/logs${urlSuffix}`)
-        ]);
-        
-        AppState.stats = await statsRes.json();
-        AppState.logs = await logsRes.json();
-        
         renderScopeHeaders();
         renderBodyModel();
         renderSummaryStats();
@@ -95,27 +755,15 @@ async function refreshScopedData() {
     }
 }
 
-// Load exercises from API
-async function loadExercises() {
-    try {
-        const res = await fetch('/api/exercises');
-        AppState.exercises = await res.json();
-        renderExerciseSelect();
-    } catch (err) {
-        console.error('Failed to load exercises:', err);
-    }
-}
-
-// --- Week & Day Controls & Handlers ---
+// --- Week & Day Controls ---
 
 function initWeekAndDayControls() {
-    // Week Select Dropdown Change
     const weekSelect = document.getElementById('week-select');
     if (weekSelect) {
         weekSelect.addEventListener('change', async (e) => {
             AppState.selectedWeekId = parseInt(e.target.value);
-            AppState.selectedDayId = null; // Reset to all-week view
-            
+            AppState.selectedDayId = null;
+
             const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
             if (currentWeek && currentWeek.days.length > 0) {
                 AppState.logTargetDayId = currentWeek.days[currentWeek.days.length - 1].id;
@@ -129,7 +777,6 @@ function initWeekAndDayControls() {
         });
     }
 
-    // "View All Week" Button
     const allWeekBtn = document.getElementById('btn-scope-all-week');
     if (allWeekBtn) {
         allWeekBtn.addEventListener('click', async () => {
@@ -139,16 +786,15 @@ function initWeekAndDayControls() {
         });
     }
 
-    // Delete Current Week Button
     const delWeekBtn = document.getElementById('btn-delete-current-week');
     if (delWeekBtn) {
         delWeekBtn.addEventListener('click', async () => {
             if (!AppState.selectedWeekId) return;
             const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
             const title = currentWeek ? currentWeek.title : 'สัปดาห์นี้';
-            
+
             if (confirm(`คุณต้องการลบ "${title}" และวันฝึกทั้งหมดในสัปดาห์นี้หรือไม่?`)) {
-                await fetch(`/api/weeks/${AppState.selectedWeekId}`, { method: 'DELETE' });
+                await dbDeleteWeek(AppState.selectedWeekId);
                 showToast(`ลบ ${title} เรียบร้อยแล้ว`);
                 AppState.selectedWeekId = null;
                 AppState.selectedDayId = null;
@@ -157,7 +803,6 @@ function initWeekAndDayControls() {
         });
     }
 
-    // Target Day Select in Logger Form
     const targetDaySelect = document.getElementById('log-target-day-select');
     if (targetDaySelect) {
         targetDaySelect.addEventListener('change', (e) => {
@@ -166,7 +811,6 @@ function initWeekAndDayControls() {
     }
 }
 
-// Render Week Dropdown
 function renderWeekSelector() {
     const select = document.getElementById('week-select');
     if (!select) return;
@@ -181,7 +825,6 @@ function renderWeekSelector() {
     });
 }
 
-// Render Target Day Selector in Logger form
 function renderTargetDaySelector() {
     const select = document.getElementById('log-target-day-select');
     if (!select) return;
@@ -212,7 +855,6 @@ function renderTargetDaySelector() {
     }
 }
 
-// Render Left Sidebar (Selected Week Info & Days List)
 function renderWeeklySidebar() {
     const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
     const weekTitleEl = document.getElementById('week-card-title');
@@ -231,14 +873,12 @@ function renderWeeklySidebar() {
         return;
     }
 
-    // Update Week summary card
     if (weekTitleEl) weekTitleEl.textContent = currentWeek.title;
     if (weekDaysCountEl) weekDaysCountEl.textContent = `${currentWeek.days.length} วันฝึก`;
     if (weekTotalSetsEl) weekTotalSetsEl.textContent = `${currentWeek.total_sets} เซ็ต`;
     if (weekTotalVolumeEl) weekTotalVolumeEl.textContent = `${currentWeek.total_volume_kg.toLocaleString()} kg`;
     if (daysBadgeEl) daysBadgeEl.textContent = `${currentWeek.days.length} วัน`;
 
-    // Highlight All Week Button if active
     if (allWeekBtn) {
         if (AppState.selectedDayId === null) {
             allWeekBtn.className = 'py-2 px-3 text-xs font-semibold rounded-xl bg-sky-500 text-white transition text-center shadow-lg shadow-sky-500/20 flex items-center justify-center gap-1.5 ring-2 ring-sky-300/40';
@@ -255,13 +895,11 @@ function renderWeeklySidebar() {
 
     if (daysEmptyState) daysEmptyState.classList.add('hidden');
 
-    // Render list of day cards
     if (daysListContainer) {
         daysListContainer.innerHTML = currentWeek.days.map(day => {
             const isActive = (AppState.selectedDayId === day.id);
             const activeClass = isActive ? 'active-day ring-2 ring-sky-400' : '';
-            
-            // Render muscle badges trained on this day
+
             let musclesHtml = '';
             if (day.muscles_trained && day.muscles_trained.length > 0) {
                 musclesHtml = `
@@ -288,14 +926,12 @@ function renderWeeklySidebar() {
                                     ${day.title}
                                 </h4>
                             </div>
-                            <!-- Real date reference badge -->
                             <div class="flex items-center gap-1 text-[11px] text-sky-400/90 font-mono mt-0.5">
                                 <span>📅</span>
                                 <span>${day.real_date ? formatRealDate(day.real_date) : 'ไม่ได้ระบุวันที่'}</span>
                             </div>
                         </div>
 
-                        <!-- Day Action Buttons -->
                         <div class="flex items-center gap-1" onclick="event.stopPropagation()">
                             <button onclick="openEditDayModal(${day.id})" title="แก้ไขวัน" class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition text-xs">
                                 ✏️
@@ -306,10 +942,8 @@ function renderWeeklySidebar() {
                         </div>
                     </div>
 
-                    <!-- Muscle Summary Pills -->
                     ${musclesHtml}
 
-                    <!-- Metrics Line -->
                     <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
                         <span>${day.exercises_count} ท่าฝึก • ${day.total_sets} เซ็ต</span>
                         <span class="text-sky-300 font-bold">${day.total_volume_kg > 0 ? day.total_volume_kg.toLocaleString() + ' kg' : '-'}</span>
@@ -320,7 +954,6 @@ function renderWeeklySidebar() {
     }
 }
 
-// Scope select handlers
 window.selectDayScope = async function(dayId) {
     AppState.selectedDayId = dayId;
     AppState.logTargetDayId = dayId;
@@ -329,7 +962,6 @@ window.selectDayScope = async function(dayId) {
     await refreshScopedData();
 };
 
-// Render Scope Headers across the UI
 function renderScopeHeaders() {
     const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
     const scopeLabel = document.getElementById('active-scope-label');
@@ -363,7 +995,6 @@ function renderScopeHeaders() {
 // --- View & Mode Switchers ---
 
 function initViewControls() {
-    // View Switchers (Front / Back / Dual)
     const viewBtns = document.querySelectorAll('[data-view-btn]');
     viewBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -373,13 +1004,12 @@ function initViewControls() {
             });
             btn.classList.remove('bg-slate-800', 'text-slate-300');
             btn.classList.add('bg-sky-500', 'text-white', 'shadow-lg');
-            
+
             AppState.currentView = btn.dataset.viewBtn;
             renderBodyModel();
         });
     });
 
-    // Color Mode Switcher (Heatmap / Recovery / Landmarks)
     const modeSelect = document.getElementById('color-mode-select');
     if (modeSelect) {
         modeSelect.addEventListener('change', (e) => {
@@ -389,7 +1019,6 @@ function initViewControls() {
         });
     }
 
-    // Reset Logs Button
     const resetBtn = document.getElementById('btn-reset-logs');
     if (resetBtn) {
         resetBtn.addEventListener('click', async () => {
@@ -397,442 +1026,590 @@ function initViewControls() {
             const scopeName = AppState.selectedDayId 
                 ? 'วันฝึกนี้' 
                 : (currentWeek ? currentWeek.title : 'ทั้งหมด');
-                
-            if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลการฝึกของ "${scopeName}"?`)) {
-                await fetch(`/api/logs/reset?week_id=${AppState.selectedWeekId || ''}&day_id=${AppState.selectedDayId || ''}`, { method: 'POST' });
+
+            if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลการฝึกของ "${scopeName}" ทั้งหมด?`)) {
+                await dbResetLogs(AppState.selectedWeekId, AppState.selectedDayId);
+                showToast(`ล้างข้อมูล ${scopeName} สำเร็จ`);
                 await loadWeeksAndInit();
-                showToast(`ล้างข้อมูล ${scopeName} เรียบร้อยแล้ว`);
             }
         });
     }
 }
 
-// --- Form and Input Handlers ---
+// --- Form & Logging Operations ---
 
 function initFormControls() {
-    // Category Filter
-    const catSelect = document.getElementById('category-filter');
-    if (catSelect) {
-        catSelect.addEventListener('change', (e) => {
-            AppState.selectedCategory = e.target.value;
+    const form = document.getElementById('workout-logger-form');
+    const exerciseSelect = document.getElementById('exercise-select');
+    const categoryTabs = document.querySelectorAll('[data-category]');
+
+    categoryTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            categoryTabs.forEach(t => {
+                t.classList.remove('bg-sky-500/20', 'text-sky-400', 'border-sky-500/40');
+                t.classList.add('bg-slate-800/60', 'text-slate-400', 'border-slate-700/50');
+            });
+            tab.classList.remove('bg-slate-800/60', 'text-slate-400', 'border-slate-700/50');
+            tab.classList.add('bg-sky-500/20', 'text-sky-400', 'border-sky-500/40');
+
+            AppState.selectedCategory = tab.dataset.category;
             renderExerciseSelect();
-        });
-    }
-
-    // Exercise Select Change
-    const exSelect = document.getElementById('exercise-select');
-    if (exSelect) {
-        exSelect.addEventListener('change', (e) => {
-            AppState.selectedExerciseId = e.target.value;
-            updateExercisePreview();
-        });
-    }
-
-    // Quick Set Buttons (+1, +3, +4, +5)
-    document.querySelectorAll('[data-quick-sets]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const input = document.getElementById('input-sets');
-            if (input) {
-                input.value = btn.dataset.quickSets;
-            }
         });
     });
 
-    // Form Submit (Log Exercise)
-    const workoutForm = document.getElementById('workout-log-form');
-    if (workoutForm) {
-        workoutForm.addEventListener('submit', async (e) => {
+    if (exerciseSelect) {
+        exerciseSelect.addEventListener('change', (e) => {
+            AppState.selectedExerciseId = e.target.value;
+            updateTargetMusclesPreview();
+        });
+    }
+
+    document.querySelectorAll('[data-quick-set]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById('input-sets');
+            if (input) input.value = btn.dataset.quickSet;
+        });
+    });
+
+    document.querySelectorAll('[data-quick-rpe]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById('input-rpe');
+            if (input) input.value = btn.dataset.quickRpe;
+        });
+    });
+
+    if (form) {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await submitWorkoutLog();
+            const exerciseId = document.getElementById('exercise-select').value;
+            const sets = parseInt(document.getElementById('input-sets').value) || 3;
+            const reps = parseInt(document.getElementById('input-reps').value) || 10;
+            const weight = parseFloat(document.getElementById('input-weight').value) || 0;
+            const rpe = parseFloat(document.getElementById('input-rpe').value) || 8.0;
+            const notes = document.getElementById('input-notes').value.trim();
+            const dayId = AppState.logTargetDayId || AppState.selectedDayId;
+
+            if (!exerciseId) {
+                showToast('กรุณาเลือกท่าออกกำลังกาย', 'error');
+                return;
+            }
+
+            try {
+                await dbAddLog({
+                    exercise_id: exerciseId,
+                    sets,
+                    reps,
+                    weight,
+                    rpe,
+                    notes,
+                    day_id: dayId
+                });
+
+                showToast(`บันทึกสำเร็จ: ${sets} เซ็ต (${weight} kg) 🎉`);
+                document.getElementById('input-notes').value = '';
+                await loadWeeksAndInit();
+            } catch (err) {
+                console.error('Failed to add log:', err);
+                showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
+            }
         });
     }
 }
 
-// Render Exercise Dropdown
 function renderExerciseSelect() {
-    const exSelect = document.getElementById('exercise-select');
-    if (!exSelect) return;
+    const select = document.getElementById('exercise-select');
+    if (!select) return;
 
     const filtered = AppState.selectedCategory === 'all'
         ? AppState.exercises
-        : AppState.exercises.filter(e => e.category === AppState.selectedCategory);
+        : AppState.exercises.filter(ex => ex.category.toLowerCase() === AppState.selectedCategory.toLowerCase());
 
-    exSelect.innerHTML = '';
+    select.innerHTML = '<option value="">-- เลือกท่าออกกำลังกาย --</option>';
+
+    const grouped = {};
     filtered.forEach(ex => {
-        const opt = document.createElement('option');
-        opt.value = ex.id;
-        opt.textContent = `${ex.name_th ? ex.name_th + ' (' + ex.name + ')' : ex.name} [${ex.category}]`;
-        exSelect.appendChild(opt);
+        if (!grouped[ex.category]) grouped[ex.category] = [];
+        grouped[ex.category].push(ex);
     });
 
-    if (filtered.length > 0) {
-        AppState.selectedExerciseId = filtered[0].id;
-        exSelect.value = filtered[0].id;
-    } else {
-        AppState.selectedExerciseId = '';
+    Object.keys(grouped).forEach(cat => {
+        const group = document.createElement('optgroup');
+        group.label = `--- ${cat.toUpperCase()} ---`;
+        grouped[cat].forEach(ex => {
+            const opt = document.createElement('option');
+            opt.value = ex.id;
+            opt.textContent = `${ex.name_th || ex.name} (${ex.name})`;
+            if (ex.id === AppState.selectedExerciseId) opt.selected = true;
+            group.appendChild(opt);
+        });
+        select.appendChild(group);
+    });
+
+    if (filtered.length > 0 && !AppState.selectedExerciseId) {
+        select.selectedIndex = 1;
+        AppState.selectedExerciseId = select.value;
     }
 
-    updateExercisePreview();
+    updateTargetMusclesPreview();
 }
 
-// Update muscle previews below the form
-function updateExercisePreview() {
-    const previewContainer = document.getElementById('exercise-muscle-preview');
-    if (!previewContainer) return;
+function updateTargetMusclesPreview() {
+    const container = document.getElementById('target-muscles-preview');
+    if (!container) return;
 
     const ex = AppState.exercises.find(e => e.id === AppState.selectedExerciseId);
     if (!ex) {
-        previewContainer.innerHTML = '<span class="text-xs text-slate-400">เลือกท่าเพื่อดูกล้ามเนื้อที่ทำงาน</span>';
+        container.innerHTML = '<span class="text-slate-500 italic text-xs">เลือกท่าฝึกเพื่อดูมัดกล้ามเนื้อ</span>';
         return;
     }
 
-    let html = `
-        <div class="flex flex-wrap gap-1.5 items-center">
-            <span class="text-xs font-semibold text-slate-400 mr-1">กล้ามเนื้อหลัก (100%):</span>
-            ${ex.primary.map(m => {
-                const name = AppState.stats.muscles[m]?.name_th || m;
-                return `<span class="px-2 py-0.5 text-xs rounded-full tag-primary font-medium">${name}</span>`;
-            }).join('')}
-        </div>
-    `;
-
-    if (ex.secondary && ex.secondary.length > 0) {
+    let html = '<div class="flex flex-wrap gap-1.5 items-center">';
+    (ex.primary || []).forEach(mKey => {
+        const meta = MUSCLE_METADATA[mKey] || {};
         html += `
-            <div class="flex flex-wrap gap-1.5 items-center mt-1.5">
-                <span class="text-xs font-semibold text-slate-400 mr-1">กล้ามเนื้อมัดรอง (50%):</span>
-                ${ex.secondary.map(m => {
-                    const name = AppState.stats.muscles[m]?.name_th || m;
-                    return `<span class="px-2 py-0.5 text-xs rounded-full tag-secondary font-medium">${name}</span>`;
-                }).join('')}
-            </div>
+            <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                ⭐ มัดหลัก: ${meta.name_th || mKey}
+            </span>
         `;
-    }
-
-    previewContainer.innerHTML = html;
+    });
+    (ex.secondary || []).forEach(mKey => {
+        const meta = MUSCLE_METADATA[mKey] || {};
+        html += `
+            <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px]">
+                มัดรอง: ${meta.name_th || mKey}
+            </span>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
 }
 
-// Submit Workout Log
-async function submitWorkoutLog() {
-    const exerciseId = document.getElementById('exercise-select')?.value;
-    const targetDayId = parseInt(document.getElementById('log-target-day-select')?.value || AppState.logTargetDayId);
-    const sets = parseInt(document.getElementById('input-sets')?.value || 3);
-    const reps = parseInt(document.getElementById('input-reps')?.value || 10);
-    const weight = parseFloat(document.getElementById('input-weight')?.value || 0);
-    const rpe = parseFloat(document.getElementById('input-rpe')?.value || 8.0);
-    const notes = document.getElementById('input-notes')?.value || '';
+// --- Modals Controls (Week, Day, Custom Exercise) ---
 
-    if (!exerciseId || sets <= 0) {
-        alert('กรุณาเลือกท่าและระบุจำนวนเซ็ตที่ถูกต้อง');
-        return;
-    }
+function initModalControls() {
+    // 1. Add Week Modal
+    const openWeekModalBtn = document.getElementById('btn-open-add-week-modal');
+    const weekModal = document.getElementById('add-week-modal');
+    const closeWeekModalBtn = document.getElementById('btn-close-week-modal');
+    const weekForm = document.getElementById('add-week-form');
 
-    if (!targetDayId) {
-        alert('กรุณาสร้างวันฝึก (Day) ในสัปดาห์ก่อนบันทึก');
-        return;
-    }
-
-    const payload = {
-        exercise_id: exerciseId,
-        day_id: targetDayId,
-        sets,
-        reps,
-        weight,
-        rpe,
-        notes
-    };
-
-    try {
-        const res = await fetch('/api/logs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+    if (openWeekModalBtn && weekModal) {
+        openWeekModalBtn.addEventListener('click', () => {
+            document.getElementById('input-week-title').value = '';
+            weekModal.classList.remove('hidden');
         });
-
-        if (res.ok) {
-            showToast(`บันทึก ${sets} เซ็ตสำเร็จ! 🔥`);
+    }
+    if (closeWeekModalBtn && weekModal) {
+        closeWeekModalBtn.addEventListener('click', () => weekModal.classList.add('hidden'));
+    }
+    if (weekForm && weekModal) {
+        weekForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('input-week-title').value.trim();
+            const newWeek = await dbAddWeek(title);
+            weekModal.classList.add('hidden');
+            showToast('สร้างสัปดาห์ใหม่เรียบร้อยแล้ว');
+            if (newWeek && newWeek.id) {
+                AppState.selectedWeekId = newWeek.id;
+                AppState.selectedDayId = null;
+            }
             await loadWeeksAndInit();
-        } else {
-            alert('เกิดข้อผิดพลาดในการบันทึก');
-        }
-    } catch (err) {
-        console.error('Failed to log workout:', err);
+        });
+    }
+
+    // 2. Add / Edit Day Modal
+    const openDayModalBtn = document.getElementById('btn-open-add-day-modal');
+    const dayModal = document.getElementById('day-modal');
+    const closeDayModalBtn = document.getElementById('btn-close-day-modal');
+    const dayForm = document.getElementById('day-form');
+
+    if (openDayModalBtn && dayModal) {
+        openDayModalBtn.addEventListener('click', () => {
+            if (!AppState.selectedWeekId) {
+                showToast('กรุณาสร้างหรือเลือกสัปดาห์ก่อน', 'error');
+                return;
+            }
+            document.getElementById('day-modal-title').textContent = 'เพิ่มวันฝึกใหม่ (Add Workout Day)';
+            document.getElementById('input-day-id').value = '';
+            document.getElementById('input-day-title').value = '';
+            document.getElementById('input-day-realdate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('input-day-notes').value = '';
+            document.getElementById('day-form-submit-btn').textContent = 'เพิ่มวันฝึก';
+            dayModal.classList.remove('hidden');
+        });
+    }
+    if (closeDayModalBtn && dayModal) {
+        closeDayModalBtn.addEventListener('click', () => dayModal.classList.add('hidden'));
+    }
+    if (dayForm && dayModal) {
+        dayForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dayId = document.getElementById('input-day-id').value;
+            const title = document.getElementById('input-day-title').value.trim();
+            const realDate = document.getElementById('input-day-realdate').value;
+            const notes = document.getElementById('input-day-notes').value.trim();
+
+            if (dayId) {
+                await dbUpdateDay(parseInt(dayId), title, realDate, notes);
+                showToast('อัปเดตข้อมูลวันฝึกเรียบร้อย');
+            } else {
+                const newDay = await dbAddDay(AppState.selectedWeekId, title, realDate, notes);
+                showToast('เพิ่มวันฝึกใหม่เรียบร้อยแล้ว');
+                if (newDay && newDay.id) {
+                    AppState.selectedDayId = newDay.id;
+                    AppState.logTargetDayId = newDay.id;
+                }
+            }
+            dayModal.classList.add('hidden');
+            await loadWeeksAndInit();
+        });
+    }
+
+    // 3. Custom Exercise Modal
+    const openCustomModalBtn = document.getElementById('btn-open-custom-modal');
+    const customModal = document.getElementById('custom-exercise-modal');
+    const closeCustomModalBtn = document.getElementById('btn-close-custom-modal');
+    const customForm = document.getElementById('custom-exercise-form');
+
+    if (openCustomModalBtn && customModal) {
+        openCustomModalBtn.addEventListener('click', () => {
+            renderMuscleCheckboxes();
+            customModal.classList.remove('hidden');
+        });
+    }
+    if (closeCustomModalBtn && customModal) {
+        closeCustomModalBtn.addEventListener('click', () => customModal.classList.add('hidden'));
+    }
+    if (customForm && customModal) {
+        customForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('custom-ex-name').value.trim();
+            const nameTh = document.getElementById('custom-ex-name-th').value.trim() || name;
+            const category = document.getElementById('custom-ex-category').value;
+
+            const primary = Array.from(document.querySelectorAll('input[name="primary-muscle"]:checked')).map(cb => cb.value);
+            const secondary = Array.from(document.querySelectorAll('input[name="secondary-muscle"]:checked')).map(cb => cb.value);
+
+            if (primary.length === 0) {
+                showToast('กรุณาเลือกกล้ามเนื้อหลักอย่างน้อย 1 มัด', 'error');
+                return;
+            }
+
+            const exId = 'custom_' + Date.now();
+            await dbAddExercise({
+                id: exId,
+                name,
+                name_th: nameTh,
+                category,
+                primary,
+                secondary
+            });
+
+            customModal.classList.add('hidden');
+            showToast(`เพิ่มท่าฝึก "${nameTh}" สำเร็จ! 🎉`);
+            await loadExercises();
+            AppState.selectedExerciseId = exId;
+            renderExerciseSelect();
+        });
     }
 }
 
-// --- Body Anatomy Vector Rendering & SVG Events ---
+window.openEditDayModal = function(dayId) {
+    const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
+    if (!currentWeek) return;
+    const day = currentWeek.days.find(d => d.id === dayId);
+    if (!day) return;
+
+    document.getElementById('day-modal-title').textContent = `แก้ไข ${day.title}`;
+    document.getElementById('input-day-id').value = day.id;
+    document.getElementById('input-day-title').value = day.title;
+    document.getElementById('input-day-realdate').value = day.real_date || new Date().toISOString().split('T')[0];
+    document.getElementById('input-day-notes').value = day.notes || '';
+    document.getElementById('day-form-submit-btn').textContent = 'บันทึกการแก้ไข';
+
+    document.getElementById('day-modal').classList.remove('hidden');
+};
+
+window.deleteDay = async function(dayId) {
+    const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
+    const day = currentWeek ? currentWeek.days.find(d => d.id === dayId) : null;
+    const title = day ? day.title : 'วันฝึกนี้';
+
+    if (confirm(`คุณต้องการลบ "${title}" และประวัติการฝึกในวันนี้หรือไม่?`)) {
+        await dbDeleteDay(dayId);
+        showToast(`ลบ ${title} เรียบร้อยแล้ว`);
+        if (AppState.selectedDayId === dayId) AppState.selectedDayId = null;
+        await loadWeeksAndInit();
+    }
+};
+
+function renderMuscleCheckboxes() {
+    const priContainer = document.getElementById('checkboxes-primary-muscles');
+    const secContainer = document.getElementById('checkboxes-secondary-muscles');
+    if (!priContainer || !secContainer) return;
+
+    let priHtml = '';
+    let secHtml = '';
+
+    Object.entries(MUSCLE_METADATA).forEach(([key, meta]) => {
+        priHtml += `
+            <label class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs">
+                <input type="checkbox" name="primary-muscle" value="${key}" class="rounded text-sky-500 focus:ring-0">
+                <span class="text-slate-300">${meta.name_th}</span>
+            </label>
+        `;
+        secHtml += `
+            <label class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer text-xs">
+                <input type="checkbox" name="secondary-muscle" value="${key}" class="rounded text-amber-500 focus:ring-0">
+                <span class="text-slate-300">${meta.name_th}</span>
+            </label>
+        `;
+    });
+
+    priContainer.innerHTML = priHtml;
+    secContainer.innerHTML = secHtml;
+}
+
+// --- Body Model & SVG Heatmap Rendering ---
 
 function renderBodyModel() {
-    const container = document.getElementById('body-model-container');
+    const container = document.getElementById('anatomy-container');
     if (!container) return;
 
-    if (AppState.currentView === 'anterior') {
+    if (typeof BodyAnatomySVG === 'undefined') {
+        container.innerHTML = `<div class="p-8 text-center text-slate-500">กำลังโหลด Anatomy SVG...</div>`;
+        return;
+    }
+
+    if (AppState.currentView === 'dual') {
         container.innerHTML = `
-            <div class="w-full max-w-[280px] mx-auto transition-opacity duration-300">
-                ${BodySVG.getAnteriorSVG()}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full h-full items-center">
+                <div class="flex flex-col items-center">
+                    <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
+                    <div class="w-full max-w-[280px]">${BodyAnatomySVG.getAnteriorView()}</div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
+                    <div class="w-full max-w-[280px]">${BodyAnatomySVG.getPosteriorView()}</div>
+                </div>
             </div>
         `;
     } else if (AppState.currentView === 'posterior') {
         container.innerHTML = `
-            <div class="w-full max-w-[280px] mx-auto transition-opacity duration-300">
-                ${BodySVG.getPosteriorSVG()}
+            <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
+                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหลัง (Posterior)</span>
+                ${BodyAnatomySVG.getPosteriorView()}
             </div>
         `;
     } else {
-        // Dual view
         container.innerHTML = `
-            <div class="grid grid-cols-2 gap-3 max-w-[540px] mx-auto">
-                <div>
-                    <p class="text-[11px] text-center text-slate-400 font-semibold mb-1">ด้านหน้า (Front)</p>
-                    ${BodySVG.getAnteriorSVG()}
-                </div>
-                <div>
-                    <p class="text-[11px] text-center text-slate-400 font-semibold mb-1">ด้านหลัง (Back)</p>
-                    ${BodySVG.getPosteriorSVG()}
-                </div>
+            <div class="flex flex-col items-center w-full max-w-[380px] mx-auto">
+                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-1">ด้านหน้า (Anterior)</span>
+                ${BodyAnatomySVG.getAnteriorView()}
             </div>
         `;
     }
 
-    bindMuscleEvents();
+    attachMuscleInteractions();
     updateMuscleColors();
+    updateLegendDisplay();
 }
 
-function bindMuscleEvents() {
-    const muscleElements = document.querySelectorAll('.muscle-part');
+function attachMuscleInteractions() {
+    const musclePaths = document.querySelectorAll('[data-muscle]');
+    const tooltip = document.getElementById('muscle-tooltip');
 
-    muscleElements.forEach(el => {
+    musclePaths.forEach(el => {
         const muscleKey = el.dataset.muscle;
+        const stats = (AppState.stats.muscles || {})[muscleKey];
 
         el.addEventListener('mouseenter', (e) => {
-            highlightMuscleGroup(muscleKey, true);
-            showTooltip(e, muscleKey);
+            if (!stats || !tooltip) return;
+            const meta = MUSCLE_METADATA[muscleKey] || {};
+
+            tooltip.innerHTML = `
+                <div class="font-bold text-sky-400 flex items-center justify-between gap-4">
+                    <span>${meta.name_th || muscleKey}</span>
+                    <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${meta.name_en}</span>
+                </div>
+                <div class="mt-1 text-slate-300 flex items-center justify-between text-xs font-mono">
+                    <span>Volume:</span>
+                    <span class="font-bold text-amber-400">${stats.effective_volume} เซ็ต</span>
+                </div>
+                <div class="text-slate-300 flex items-center justify-between text-xs font-mono">
+                    <span>สถานะ:</span>
+                    <span class="font-semibold text-emerald-400">${stats.volume_status_th}</span>
+                </div>
+                <div class="text-slate-300 flex items-center justify-between text-xs font-mono">
+                    <span>การฟื้นตัว:</span>
+                    <span class="font-semibold ${stats.recovery_percent === 100 ? 'text-emerald-400' : 'text-amber-400'}">${stats.recovery_percent}%</span>
+                </div>
+                ${stats.hours_remaining > 0 ? `
+                    <div class="text-slate-400 text-[10px] mt-0.5">⏱️ พักอีกประมาณ ${stats.hours_remaining} ชม.</div>
+                ` : ''}
+            `;
+
+            tooltip.classList.remove('hidden');
+            positionTooltip(e, tooltip);
         });
 
         el.addEventListener('mousemove', (e) => {
-            positionTooltip(e);
+            if (tooltip) positionTooltip(e, tooltip);
         });
 
         el.addEventListener('mouseleave', () => {
-            highlightMuscleGroup(muscleKey, false);
-            hideTooltip();
+            if (tooltip) tooltip.classList.add('hidden');
         });
 
         el.addEventListener('click', () => {
-            selectMuscleDrilldown(muscleKey);
+            selectMuscle(muscleKey);
         });
     });
 }
 
-function highlightMuscleGroup(muscleKey, isActive) {
-    const parts = document.querySelectorAll(`[data-muscle="${muscleKey}"]`);
-    parts.forEach(p => {
-        if (isActive) {
-            p.classList.add('active-selected');
-        } else {
-            p.classList.remove('active-selected');
-        }
-    });
+function positionTooltip(e, tooltip) {
+    const x = e.clientX + 12;
+    const y = e.clientY + 12;
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
 }
 
 function updateMuscleColors() {
-    const muscleElements = document.querySelectorAll('.muscle-part');
+    const musclePaths = document.querySelectorAll('[data-muscle]');
     const muscles = AppState.stats.muscles || {};
 
-    muscleElements.forEach(el => {
-        const key = el.dataset.muscle;
-        const data = muscles[key];
-        if (!data) return;
+    musclePaths.forEach(el => {
+        const muscleKey = el.dataset.muscle;
+        const st = muscles[muscleKey];
+        if (!st) return;
 
-        let fillColor = '#334155'; // default inactive slate-700
-        el.classList.remove('glow-high');
+        let color = '#334155';
 
-        if (AppState.colorMode === 'heatmap') {
-            fillColor = data.heatmap_color || '#334155';
-            if (data.heatmap_level >= 4) {
-                el.classList.add('glow-high');
-            }
-        } else if (AppState.colorMode === 'recovery') {
-            const rec = data.recovery_percent;
-            if (data.effective_volume === 0) {
-                fillColor = '#334155';
-            } else if (rec < 35) {
-                fillColor = '#ef4444'; // Red
-            } else if (rec < 70) {
-                fillColor = '#f59e0b'; // Amber
-            } else if (rec < 95) {
-                fillColor = '#0284c7'; // Sky/Blue
-            } else {
-                fillColor = '#10b981'; // Ready/Green
-            }
+        if (AppState.colorMode === 'recovery') {
+            const rec = st.recovery_percent || 100;
+            if (st.effective_volume === 0) color = '#334155';
+            else if (rec >= 100) color = '#10b981';
+            else if (rec >= 70) color = '#22c55e';
+            else if (rec >= 40) color = '#f59e0b';
+            else color = '#ef4444';
         } else if (AppState.colorMode === 'landmarks') {
-            const eff = data.effective_volume;
-            if (eff === 0) {
-                fillColor = '#334155';
-            } else if (eff < data.mev) {
-                fillColor = '#38bdf8'; // Light Blue (Under MEV)
-            } else if (eff <= data.mav) {
-                fillColor = '#10b981'; // Emerald (MAV - Optimal)
-            } else if (eff <= data.mrv) {
-                fillColor = '#f97316'; // Orange (High Volume)
-            } else {
-                fillColor = '#ef4444'; // Red (Overreaching)
-            }
+            const vol = st.effective_volume;
+            if (vol === 0) color = '#334155';
+            else if (vol < st.mev) color = '#3b82f6';
+            else if (vol <= st.mav) color = '#10b981';
+            else if (vol <= st.mrv) color = '#f59e0b';
+            else color = '#ef4444';
+        } else {
+            color = st.heatmap_color || '#334155';
         }
 
-        if (el.tagName.toLowerCase() === 'g') {
-            el.querySelectorAll('path').forEach(p => p.style.fill = fillColor);
+        el.style.fill = color;
+        el.style.transition = 'fill 0.3s ease, filter 0.2s ease';
+
+        if (AppState.selectedMuscleKey === muscleKey) {
+            el.style.filter = 'drop-shadow(0 0 6px rgba(14, 165, 233, 0.8))';
+            el.style.stroke = '#38bdf8';
+            el.style.strokeWidth = '1.5';
         } else {
-            el.style.fill = fillColor;
+            el.style.filter = 'none';
+            el.style.stroke = 'rgba(15, 23, 42, 0.5)';
+            el.style.strokeWidth = '0.5';
         }
     });
 }
 
 function updateLegendDisplay() {
-    const legendContainer = document.getElementById('model-legend');
-    if (!legendContainer) return;
+    const titleEl = document.getElementById('legend-title');
+    const container = document.getElementById('legend-items-container');
+    if (!container) return;
 
-    if (AppState.colorMode === 'heatmap') {
-        legendContainer.innerHTML = `
-            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-700 inline-block"></span> 0 เซ็ต</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> 1-3 เซ็ต (เบา)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> 4-7 เซ็ต (กลาง)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-500 inline-block"></span> 8-12 เซ็ต (หนัก)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> 13+ เซ็ต (สูงสุด)</div>
-            </div>
-        `;
-    } else if (AppState.colorMode === 'recovery') {
-        legendContainer.innerHTML = `
-            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> &lt;35% ล้าหนัก</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> 35-70% กำลังฟื้นตัว</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-500 inline-block"></span> 70-95% เกือบพร้อม</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> 100% พร้อมฝึกเต็มที่</div>
-            </div>
+    if (AppState.colorMode === 'recovery') {
+        if (titleEl) titleEl.textContent = 'คำอธิบายระดับการฟื้นตัว (Muscle Recovery Decay):';
+        container.innerHTML = `
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981]"></span><span>100% พร้อมเต็มที่</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e]"></span><span>70-99% ฟื้นเกือบสมบูรณ์</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>40-69% กำลังฟื้นฟู</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>&lt;40% ล้าสะสมสูง</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155]"></span><span>ยังไม่ได้บริหาร</span></div>
         `;
     } else if (AppState.colorMode === 'landmarks') {
-        legendContainer.innerHTML = `
-            <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300">
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-400 inline-block"></span> &lt; MEV (คงสภาพ)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> MEV-MAV (เติบโตดีเยี่ยม)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-500 inline-block"></span> MAV-MRV (หนักใกล้ลิมิต)</div>
-                <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> &gt; MRV (เสี่ยงล้าสะสม)</div>
-            </div>
+        if (titleEl) titleEl.textContent = 'คำอธิบายเกณฑ์ Hypertrophy Landmarks (MEV / MAV / MRV):';
+        container.innerHTML = `
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#3b82f6]"></span><span>&lt; MEV คงสภาพ</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#10b981]"></span><span>MEV-MAV โตสูงสุด</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>MAV-MRV ปริมาณสูง</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>&gt; MRV เกินขีดจำกัด</span></div>
+        `;
+    } else {
+        if (titleEl) titleEl.textContent = 'คำอธิบายความถี่ / ปริมาณเซ็ต (Heatmap Volume):';
+        container.innerHTML = `
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#334155]"></span><span>0 เซ็ต</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#22c55e]"></span><span>1-3 เซ็ต</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f59e0b]"></span><span>4-7 เซ็ต</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#f97316]"></span><span>8-12 เซ็ต</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-[#ef4444]"></span><span>13+ เซ็ต</span></div>
         `;
     }
 }
 
-// Tooltip Logic
-function showTooltip(e, muscleKey) {
-    const tooltip = document.getElementById('muscle-tooltip');
-    const data = AppState.stats.muscles?.[muscleKey];
-    if (!tooltip || !data) return;
+// --- Summary & Cards Rendering ---
 
-    document.getElementById('tooltip-title').textContent = `${data.name_th} (${data.name_en})`;
-    document.getElementById('tooltip-sets').textContent = `${data.effective_volume} Effective Sets (${data.raw_sets} Raw)`;
-    document.getElementById('tooltip-recovery').textContent = `การฟื้นตัว: ${data.recovery_percent}% ${data.hours_remaining > 0 ? `(เหลือ ~${data.hours_remaining} ชม.)` : '✨ พร้อมฝึก'}`;
-    document.getElementById('tooltip-status').textContent = `สถานะ: ${data.volume_status_th}`;
-
-    const exList = document.getElementById('tooltip-exercises');
-    if (data.recent_exercises && data.recent_exercises.length > 0) {
-        exList.innerHTML = data.recent_exercises.map(ex => `• ${ex}`).join('<br>');
-        document.getElementById('tooltip-exercises-wrap').classList.remove('hidden');
-    } else {
-        document.getElementById('tooltip-exercises-wrap').classList.add('hidden');
-    }
-
-    positionTooltip(e);
-    tooltip.classList.remove('opacity-0', 'pointer-events-none');
-}
-
-function positionTooltip(e) {
-    const tooltip = document.getElementById('muscle-tooltip');
-    if (!tooltip) return;
-    const x = e.clientX + 15;
-    const y = e.clientY + 15;
-    tooltip.style.left = `${x}px`;
-    tooltip.style.top = `${y}px`;
-}
-
-function hideTooltip() {
-    const tooltip = document.getElementById('muscle-tooltip');
-    if (tooltip) {
-        tooltip.classList.add('opacity-0', 'pointer-events-none');
-    }
-}
-
-function selectMuscleDrilldown(muscleKey) {
-    AppState.selectedMuscleKey = muscleKey;
-    const targetCard = document.getElementById(`muscle-card-${muscleKey}`);
-    if (targetCard) {
-        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        targetCard.classList.add('ring-2', 'ring-sky-400');
-        setTimeout(() => targetCard.classList.remove('ring-2', 'ring-sky-400'), 2000);
-    }
-}
-
-// Summary Metrics Bar
 function renderSummaryStats() {
-    const summary = AppState.stats.summary || {};
-    document.getElementById('stat-total-sets').textContent = summary.total_sets || 0;
-    document.getElementById('stat-active-muscles').textContent = summary.active_muscle_count || 0;
-    document.getElementById('stat-total-volume').textContent = (summary.total_volume_kg || 0).toLocaleString() + ' kg';
-    document.getElementById('stat-total-logs').textContent = `${summary.total_logs || 0} รายการ`;
+    const sum = AppState.stats.summary || {};
+    const totalSetsEl = document.getElementById('stat-total-sets');
+    const activeMusclesEl = document.getElementById('stat-active-muscles');
+    const totalVolumeEl = document.getElementById('stat-total-volume');
+
+    if (totalSetsEl) totalSetsEl.textContent = sum.total_sets || 0;
+    if (activeMusclesEl) activeMusclesEl.textContent = sum.active_muscle_count || 0;
+    if (totalVolumeEl) totalVolumeEl.textContent = (sum.total_volume_kg || 0).toLocaleString() + ' kg';
 }
 
-// Render Muscle Detail Cards Grid
 function renderMuscleCards() {
-    const container = document.getElementById('muscle-cards-container');
+    const container = document.getElementById('muscle-cards-grid');
     if (!container) return;
 
     const muscles = Object.values(AppState.stats.muscles || {});
-    if (muscles.length === 0) return;
+    if (muscles.length === 0) {
+        container.innerHTML = '<div class="col-span-full p-4 text-center text-slate-500">ไม่มีข้อมูลกล้ามเนื้อ</div>';
+        return;
+    }
 
     muscles.sort((a, b) => b.effective_volume - a.effective_volume);
 
     container.innerHTML = muscles.map(m => {
-        const pct = Math.min(100, Math.round((m.effective_volume / m.mrv) * 100));
-
-        let badgeBg = 'bg-slate-800 text-slate-300';
-        if (m.effective_volume > 0) {
-            if (m.effective_volume >= m.mrv) badgeBg = 'bg-red-500/20 text-red-400 border border-red-500/40';
-            else if (m.effective_volume >= m.mav) badgeBg = 'bg-orange-500/20 text-orange-400 border border-orange-500/40';
-            else if (m.effective_volume >= m.mev) badgeBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
-            else badgeBg = 'bg-sky-500/20 text-sky-400 border border-sky-500/40';
-        }
+        const progressMev = Math.min(100, Math.round((m.effective_volume / m.mav) * 100));
+        const isSelected = AppState.selectedMuscleKey === m.key;
 
         return `
-            <div id="muscle-card-${m.key}" class="glass-card glass-card-hover rounded-xl p-4 transition-all">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <h4 class="font-bold text-slate-100 text-sm md:text-base">${m.name_th}</h4>
-                        <p class="text-xs text-slate-400 font-mono">${m.name_en}</p>
+            <div class="glass-card rounded-xl p-3.5 border ${isSelected ? 'border-sky-500 ring-1 ring-sky-500/50' : 'border-slate-800'} hover:border-slate-700 transition cursor-pointer flex flex-col justify-between"
+                 onclick="selectMuscle('${m.key}')">
+                <div>
+                    <div class="flex items-start justify-between gap-1">
+                        <div>
+                            <h4 class="font-bold text-slate-200 text-xs">${m.name_th}</h4>
+                            <span class="text-[10px] text-slate-400 font-mono">${m.name_en}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono" style="background-color: ${m.heatmap_color}25; color: ${m.heatmap_color};">
+                            ${m.effective_volume}s
+                        </span>
                     </div>
-                    <span class="px-2 py-0.5 text-xs font-semibold rounded-md ${badgeBg}">
-                        ${m.effective_volume} Sets
-                    </span>
+
+                    <div class="mt-2.5">
+                        <div class="flex justify-between text-[10px] text-slate-400 mb-1">
+                            <span>ความคืบหน้า MAV</span>
+                            <span class="font-mono">${m.effective_volume}/${m.mav}s</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-500" style="width: ${progressMev}%; background-color: ${m.heatmap_color};"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Progress Volume Landmark Bar -->
-                <div class="mt-3">
-                    <div class="flex justify-between text-[11px] text-slate-400 mb-1">
-                        <span>เป้าหมาย MEV: ${m.mev} | MAV: ${m.mav} | MRV: ${m.mrv}</span>
-                        <span class="font-bold text-slate-200">${m.volume_status_th}</span>
-                    </div>
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden relative">
-                        <div class="h-full rounded-full transition-all duration-500" 
-                             style="width: ${pct}%; background-color: ${m.heatmap_color || '#38bdf8'}"></div>
-                    </div>
-                </div>
-
-                <!-- Recovery & Last Worked -->
-                <div class="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full ${m.recovery_percent === 100 ? 'bg-emerald-400' : m.recovery_percent >= 50 ? 'bg-amber-400' : 'bg-red-400'}"></span>
-                        <span class="text-slate-300">ฟื้นตัว ${m.recovery_percent}%</span>
-                    </div>
-                    <span class="text-slate-400 text-[11px]">
-                        ${m.hours_since_workout !== null ? `เล่นเมื่อ ${m.hours_since_workout} ชม.ที่แล้ว` : 'ยังไม่มีประวัติ'}
+                <div class="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span>${m.volume_status_th}</span>
+                    <span class="${m.recovery_percent === 100 ? 'text-emerald-400' : 'text-amber-400'} font-semibold">
+                        ⚡ ${m.recovery_percent}%
                     </span>
                 </div>
             </div>
@@ -840,54 +1617,56 @@ function renderMuscleCards() {
     }).join('');
 }
 
-// Render Workout History Log Table
-function renderLogsHistory() {
-    const tbody = document.getElementById('workout-logs-tbody');
-    const emptyState = document.getElementById('workout-logs-empty');
-    if (!tbody) return;
+function selectMuscle(muscleKey) {
+    if (AppState.selectedMuscleKey === muscleKey) {
+        AppState.selectedMuscleKey = null;
+    } else {
+        AppState.selectedMuscleKey = muscleKey;
+    }
+    updateMuscleColors();
+    renderMuscleCards();
+}
 
-    if (!AppState.logs || AppState.logs.length === 0) {
-        tbody.innerHTML = '';
+function renderLogsHistory() {
+    const container = document.getElementById('logs-history-tbody');
+    const emptyState = document.getElementById('logs-empty-state');
+    if (!container) return;
+
+    const logs = AppState.logs || [];
+    if (logs.length === 0) {
+        container.innerHTML = '';
         if (emptyState) emptyState.classList.remove('hidden');
         return;
     }
 
     if (emptyState) emptyState.classList.add('hidden');
 
-    tbody.innerHTML = AppState.logs.map(log => {
+    container.innerHTML = logs.map(l => {
+        let timeStr = l.logged_at;
+        try {
+            const dt = new Date(l.logged_at);
+            timeStr = dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        } catch (_) {}
+
         return `
-            <tr class="border-b border-slate-800 hover:bg-slate-800/40 transition text-xs">
-                <td class="py-3 px-4 text-slate-400 whitespace-nowrap">
-                    ${formatDate(log.logged_at)}
+            <tr class="border-b border-slate-800/60 hover:bg-slate-800/30 transition text-xs">
+                <td class="py-2.5 px-3 font-mono text-slate-400">${timeStr}</td>
+                <td class="py-2.5 px-3">
+                    <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 font-mono text-[10px]">
+                        ${l.day_title || 'วันฝึก'}
+                    </span>
                 </td>
-                <td class="py-3 px-4 font-medium text-sky-400 whitespace-nowrap">
-                    <div>${log.day_title}</div>
-                    <span class="text-[10px] text-slate-400 font-mono">${log.day_real_date ? formatRealDate(log.day_real_date) : ''}</span>
+                <td class="py-2.5 px-3">
+                    <div class="font-semibold text-slate-200">${l.exercise_name_th || l.exercise_name}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">${l.category}</div>
                 </td>
-                <td class="py-3 px-4 font-semibold text-slate-200">
-                    <div>${log.exercise_name_th || log.exercise_name}</div>
-                    <span class="text-[11px] text-slate-400 font-normal">${log.exercise_name}</span>
-                </td>
-                <td class="py-3 px-4">
-                    <span class="px-2 py-0.5 text-xs bg-slate-800 text-slate-300 rounded font-medium">${log.category}</span>
-                </td>
-                <td class="py-3 px-4 text-center font-bold text-sky-400">
-                    ${log.sets}
-                </td>
-                <td class="py-3 px-4 text-center text-slate-300 font-mono">
-                    ${log.reps}
-                </td>
-                <td class="py-3 px-4 text-center text-slate-300 font-mono">
-                    ${log.weight > 0 ? log.weight + ' kg' : '-'}
-                </td>
-                <td class="py-3 px-4 text-center text-amber-400 font-mono">
-                    ${log.rpe || '-'}
-                </td>
-                <td class="py-3 px-4 text-right">
-                    <button onclick="deleteWorkoutLog(${log.id})" class="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 p-1.5 rounded transition">
-                        <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                <td class="py-2.5 px-3 font-mono text-slate-300 font-bold">${l.sets}</td>
+                <td class="py-2.5 px-3 font-mono text-slate-300">${l.reps}</td>
+                <td class="py-2.5 px-3 font-mono text-sky-400 font-semibold">${l.weight} kg</td>
+                <td class="py-2.5 px-3 font-mono text-amber-400">${l.rpe}</td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="deleteWorkoutLog(${l.id})" class="p-1 rounded text-rose-400 hover:bg-rose-500/10 transition">
+                        🗑️
                     </button>
                 </td>
             </tr>
@@ -895,250 +1674,44 @@ function renderLogsHistory() {
     }).join('');
 }
 
-// Delete Log Function
-window.deleteWorkoutLog = async function(id) {
-    if (!confirm('ต้องการลบรายการฝึกนี้ใช่หรือไม่?')) return;
-    try {
-        const res = await fetch(`/api/logs/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-            showToast('ลบรายการสำเร็จ');
-            await loadWeeksAndInit();
-        }
-    } catch (err) {
-        console.error('Failed to delete log:', err);
+window.deleteWorkoutLog = async function(logId) {
+    if (confirm('คุณต้องการลบรายการฝึกนี้หรือไม่?')) {
+        await dbDeleteLog(logId);
+        showToast('ลบรายการสำเร็จ');
+        await loadWeeksAndInit();
     }
 };
 
-// Delete Day Function
-window.deleteDay = async function(dayId) {
-    if (!confirm('คุณต้องการลบวันฝึกนี้และรายการฝึกทั้งหมดในวันนี้หรือไม่?')) return;
-    try {
-        const res = await fetch(`/api/days/${dayId}`, { method: 'DELETE' });
-        if (res.ok) {
-            showToast('ลบวันฝึกเรียบร้อยแล้ว');
-            if (AppState.selectedDayId === dayId) AppState.selectedDayId = null;
-            await loadWeeksAndInit();
-        }
-    } catch (err) {
-        console.error('Failed to delete day:', err);
-    }
-};
-
-// Open Edit Day Modal
-window.openEditDayModal = function(dayId) {
-    const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-    if (!currentWeek) return;
-    const day = currentWeek.days.find(d => d.id === dayId);
-    if (!day) return;
-
-    document.getElementById('input-day-id').value = day.id;
-    document.getElementById('input-day-title').value = day.title;
-    document.getElementById('input-day-realdate').value = day.real_date || new Date().toISOString().split('T')[0];
-    document.getElementById('input-day-notes').value = day.notes || '';
-    document.getElementById('day-modal-title').textContent = 'แก้ไขข้อมูลวันฝึก';
-    document.getElementById('day-form-submit-btn').textContent = 'บันทึกการแก้ไข';
-    
-    document.getElementById('day-modal')?.classList.remove('hidden');
-};
-
-// --- Modals Management ---
-
-function initModalControls() {
-    // 1. Custom Exercise Modal
-    const exModal = document.getElementById('custom-exercise-modal');
-    const openExBtn = document.getElementById('btn-open-custom-modal');
-    const closeExBtn = document.getElementById('btn-close-custom-modal');
-    const exForm = document.getElementById('custom-exercise-form');
-
-    if (openExBtn && exModal) openExBtn.addEventListener('click', () => exModal.classList.remove('hidden'));
-    if (closeExBtn && exModal) closeExBtn.addEventListener('click', () => exModal.classList.add('hidden'));
-
-    if (exForm) {
-        exForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = document.getElementById('custom-ex-name').value;
-            const nameTh = document.getElementById('custom-ex-nameth').value;
-            const category = document.getElementById('custom-ex-category').value;
-            const primary = Array.from(document.querySelectorAll('input[name="custom-primary"]:checked')).map(cb => cb.value);
-            const secondary = Array.from(document.querySelectorAll('input[name="custom-secondary"]:checked')).map(cb => cb.value);
-
-            if (primary.length === 0) {
-                alert('กรุณาเลือกกล้ามเนื้อมัดหลักอย่างน้อย 1 มัด');
-                return;
-            }
-
-            const payload = {
-                id: 'custom_' + Date.now(),
-                name,
-                name_th: nameTh || name,
-                category,
-                primary,
-                secondary
-            };
-
-            const res = await fetch('/api/exercises', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                showToast('เพิ่มท่าออกกำลังกายใหม่แล้ว!');
-                exModal.classList.add('hidden');
-                exForm.reset();
-                await loadExercises();
-            }
-        });
-    }
-
-    // 2. Add Week Modal
-    const weekModal = document.getElementById('add-week-modal');
-    const openWeekBtn = document.getElementById('btn-add-week-modal');
-    const closeWeekBtn = document.getElementById('btn-close-week-modal');
-    const weekForm = document.getElementById('add-week-form');
-
-    if (openWeekBtn && weekModal) openWeekBtn.addEventListener('click', () => weekModal.classList.remove('hidden'));
-    if (closeWeekBtn && weekModal) closeWeekBtn.addEventListener('click', () => weekModal.classList.add('hidden'));
-
-    if (weekForm) {
-        weekForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const title = document.getElementById('input-week-title').value;
-            const res = await fetch('/api/weeks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title })
-            });
-
-            if (res.ok) {
-                const newWeek = await res.json();
-                showToast(`สร้าง "${newWeek.title}" เรียบร้อยแล้ว! ✨`);
-                weekModal.classList.add('hidden');
-                weekForm.reset();
-                AppState.selectedWeekId = newWeek.id;
-                AppState.selectedDayId = null;
-                await loadWeeksAndInit();
-            }
-        });
-    }
-
-    // 3. Add / Edit Day Modal
-    const dayModal = document.getElementById('day-modal');
-    const openDayBtn = document.getElementById('btn-add-day-modal');
-    const emptyAddDayBtn = document.getElementById('btn-empty-add-day');
-    const closeDayBtn = document.getElementById('btn-close-day-modal');
-    const dayForm = document.getElementById('day-form');
-
-    const openNewDayModal = () => {
-        if (!AppState.selectedWeekId) {
-            alert('กรุณาสร้างสัปดาห์ก่อน');
-            return;
-        }
-        document.getElementById('input-day-id').value = '';
-        const currentWeek = AppState.weeks.find(w => w.id === AppState.selectedWeekId);
-        const nextDayNum = (currentWeek?.days?.length || 0) + 1;
-        document.getElementById('input-day-title').value = `วันที่ ${nextDayNum}`;
-        document.getElementById('input-day-realdate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('input-day-notes').value = '';
-        document.getElementById('day-modal-title').textContent = 'เพิ่มวันฝึกใหม่ (Add Workout Day)';
-        document.getElementById('day-form-submit-btn').textContent = 'บันทึกวันฝึก';
-        dayModal.classList.remove('hidden');
-    };
-
-    if (openDayBtn && dayModal) openDayBtn.addEventListener('click', openNewDayModal);
-    if (emptyAddDayBtn && dayModal) emptyAddDayBtn.addEventListener('click', openNewDayModal);
-    if (closeDayBtn && dayModal) closeDayBtn.addEventListener('click', () => dayModal.classList.add('hidden'));
-
-    if (dayForm) {
-        dayForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const dayId = document.getElementById('input-day-id').value;
-            const title = document.getElementById('input-day-title').value;
-            const realDate = document.getElementById('input-day-realdate').value;
-            const notes = document.getElementById('input-day-notes').value;
-
-            if (dayId) {
-                // Update existing day
-                const res = await fetch(`/api/days/${dayId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, real_date: realDate, notes })
-                });
-                if (res.ok) {
-                    showToast('อัปเดตวันฝึกสำเร็จ! ✨');
-                    dayModal.classList.add('hidden');
-                    await loadWeeksAndInit();
-                }
-            } else {
-                // Create new day
-                const res = await fetch('/api/days', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        week_id: AppState.selectedWeekId,
-                        title,
-                        real_date: realDate,
-                        notes
-                    })
-                });
-                if (res.ok) {
-                    const newDay = await res.json();
-                    showToast(`เพิ่ม "${newDay.title}" เรียบร้อยแล้ว! 🏋️`);
-                    dayModal.classList.add('hidden');
-                    AppState.selectedDayId = newDay.id;
-                    AppState.logTargetDayId = newDay.id;
-                    await loadWeeksAndInit();
-                }
-            }
-        });
-    }
-}
-
-// --- Helpers ---
-
-function showToast(message) {
-    let toast = document.getElementById('app-toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'app-toast';
-        toast.className = 'fixed bottom-6 right-6 z-50 bg-sky-600 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 transform translate-y-10 opacity-0 font-medium text-sm flex items-center gap-2';
-        document.body.appendChild(toast);
-    }
-
-    toast.innerHTML = `<span>✨</span> <span>${message}</span>`;
-    toast.classList.remove('translate-y-10', 'opacity-0');
-    toast.classList.add('translate-y-0', 'opacity-100');
-
-    setTimeout(() => {
-        toast.classList.remove('translate-y-0', 'opacity-100');
-        toast.classList.add('translate-y-10', 'opacity-0');
-    }, 2800);
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    try {
-        const d = new Date(dateStr.replace(' ', 'T'));
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString([], { day: '2-digit', month: 'short' });
-    } catch {
-        return dateStr;
-    }
-}
+// --- Utilities ---
 
 function formatRealDate(dateStr) {
     if (!dateStr) return '';
     try {
         const parts = dateStr.split('-');
         if (parts.length === 3) {
-            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            const monthsTh = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            const yearTh = parseInt(parts[0]) + 543;
+            const monthTh = monthsTh[parseInt(parts[1])] || parts[1];
             const day = parseInt(parts[2]);
-            const monthIdx = parseInt(parts[1]) - 1;
-            const year = parseInt(parts[0]) + 543; // Buddhist era or standard
-            return `${day} ${months[monthIdx]} ${parts[0]}`;
+            return `${day} ${monthTh} ${yearTh}`;
         }
-        return dateStr;
-    } catch {
-        return dateStr;
-    }
+    } catch (_) {}
+    return dateStr;
 }
 
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold backdrop-blur-md transition-all duration-300 border ${
+        type === 'error'
+            ? 'bg-rose-950/80 border-rose-500/50 text-rose-200'
+            : 'bg-slate-900/90 border-sky-500/50 text-sky-200 shadow-sky-500/10'
+    }`;
+    toast.innerHTML = `<span>${type === 'error' ? '⚠️' : '⚡'}</span><span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 2800);
+}
