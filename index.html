@@ -430,58 +430,67 @@
 
         </div>
 
-        <!-- Muscle Detail Cards Grid -->
-        <div>
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h3 class="font-bold text-lg text-slate-100 flex items-center gap-2">
-                        <span>📊</span> สถานะปริมาณการฝึก & การฟื้นตัวรายมัดกล้ามเนื้อ (Muscle Breakdown)
-                    </h3>
-                    <p class="text-xs text-slate-400" id="muscle-cards-scope-subtitle">คำนวณตามสถิติของสัปดาห์ที่เลือก</p>
+        <!-- Bottom Section: Unified Tabs (Muscle Breakdown & Workout History Log) -->
+        <div class="glass-card rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+            
+            <!-- Tab Controls Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div class="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800/80 w-fit">
+                    <button id="tab-btn-muscles" onclick="window.switchBottomTab && window.switchBottomTab('muscles')" 
+                            class="px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 bg-sky-500 text-white shadow-lg shadow-sky-500/20 cursor-pointer">
+                        <span>📊</span>
+                        <span>สถานะมัดกล้ามเนื้อ (Muscle Breakdown)</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-600/60 text-sky-100 font-mono">16</span>
+                    </button>
+                    <button id="tab-btn-history" onclick="window.switchBottomTab && window.switchBottomTab('history')" 
+                            class="px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer">
+                        <span>📋</span>
+                        <span>ประวัติการฝึก (Workout History Log)</span>
+                        <span id="stat-total-logs-badge" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-sky-400 font-mono font-bold">0</span>
+                    </button>
                 </div>
-                <span class="text-xs text-slate-400">16 กลุ่มกล้ามเนื้อมาตรฐาน</span>
-            </div>
-
-            <div id="muscle-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Dynamic cards populated by JavaScript -->
-            </div>
-        </div>
-
-        <!-- Workout History Table -->
-        <div class="glass-card rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-                <div>
-                    <h3 class="font-bold text-base text-slate-100 flex items-center gap-2">
-                        <span>📋</span> ประวัติการฝึกที่บันทึก (Workout History Log)
-                    </h3>
-                    <span id="history-scope-subtitle" class="text-xs text-slate-400">แสดงรายการในสโคปที่เลือก</span>
+                
+                <!-- Dynamic Scope Subtitle for Active Tab -->
+                <div class="text-xs text-slate-400 font-mono flex items-center gap-2">
+                    <span id="bottom-tab-scope-subtitle">คำนวณตามสถิติของสัปดาห์ที่เลือก</span>
                 </div>
-                <span id="stat-total-logs" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-sky-400 font-mono font-bold">0 รายการ</span>
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-slate-800">
-                        <tr>
-                            <th class="py-3 px-4">เวลา/วัน</th>
-                            <th class="py-3 px-4">วันฝึก (Day)</th>
-                            <th class="py-3 px-4">ท่าออกกำลังกาย</th>
-                            <th class="py-3 px-4">หมวดหมู่</th>
-                            <th class="py-3 px-4 text-center">เซ็ต</th>
-                            <th class="py-3 px-4 text-center">ครั้ง (Reps)</th>
-                            <th class="py-3 px-4 text-center">น้ำหนัก</th>
-                            <th class="py-3 px-4 text-center">RPE</th>
-                            <th class="py-3 px-4 text-right">การจัดการ</th>
-                        </tr>
-                    </thead>
-                    <tbody id="workout-logs-tbody">
-                        <!-- Dynamic log rows -->
-                    </tbody>
-                </table>
+            <!-- Tab Content 1: Muscle Detail Cards Grid -->
+            <div id="tab-content-muscles" class="transition-all duration-200">
+                <div id="muscle-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Dynamic cards populated by JavaScript -->
+                </div>
             </div>
 
-            <div id="workout-logs-empty" class="py-12 text-center text-slate-500 hidden">
-                <p class="text-sm">ยังไม่มีประวัติการฝึกในสโคปนี้ กดบันทึกท่าออกกำลังกายด้านบนเพื่อเริ่มต้น</p>
+            <!-- Tab Content 2: Workout History Table -->
+            <div id="tab-content-history" class="hidden transition-all duration-200">
+                <div class="overflow-hidden rounded-xl border border-slate-800/80">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-800 font-mono">
+                                <tr>
+                                    <th class="py-3 px-4">เวลา/วัน</th>
+                                    <th class="py-3 px-4">วันฝึก (Day)</th>
+                                    <th class="py-3 px-4">ท่าออกกำลังกาย</th>
+                                    <th class="py-3 px-4">หมวดหมู่</th>
+                                    <th class="py-3 px-4 text-center">เซ็ต</th>
+                                    <th class="py-3 px-4 text-center">ครั้ง (Reps)</th>
+                                    <th class="py-3 px-4 text-center">น้ำหนัก</th>
+                                    <th class="py-3 px-4 text-center">RPE</th>
+                                    <th class="py-3 px-4 text-right">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="workout-logs-tbody">
+                                <!-- Dynamic log rows -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="workout-logs-empty" class="py-12 text-center text-slate-500 hidden">
+                        <p class="text-sm">ยังไม่มีประวัติการฝึกในสโคปนี้ กดบันทึกท่าออกกำลังกายด้านบนเพื่อเริ่มต้น</p>
+                    </div>
+                </div>
             </div>
         </div>
 

@@ -1127,10 +1127,12 @@ function renderScopeHeaders() {
     const scopeLabel = document.getElementById('active-scope-label');
     const muscleScopeSubtitle = document.getElementById('muscle-cards-scope-subtitle');
     const historyScopeSubtitle = document.getElementById('history-scope-subtitle');
+    const tabScopeSubtitle = document.getElementById('bottom-tab-scope-subtitle');
     const labelStatSets = document.getElementById('label-stat-sets');
 
     if (!currentWeek) {
         if (scopeLabel) scopeLabel.textContent = 'สถิติ: ไม่ได้เลือกสัปดาห์';
+        if (tabScopeSubtitle) tabScopeSubtitle.textContent = 'ยังไม่ได้เลือกสัปดาห์';
         return;
     }
 
@@ -1139,6 +1141,7 @@ function renderScopeHeaders() {
         if (scopeLabel) scopeLabel.textContent = `📊 ${text}`;
         if (muscleScopeSubtitle) muscleScopeSubtitle.textContent = `คำนวณตามปริมาณฝึกรวมของ ${currentWeek.title}`;
         if (historyScopeSubtitle) historyScopeSubtitle.textContent = `แสดงประวัติทั้งหมดของ ${currentWeek.title}`;
+        if (tabScopeSubtitle) tabScopeSubtitle.textContent = `สถิติ & ประวัติของ ${currentWeek.title} (ทั้งสัปดาห์)`;
         if (labelStatSets) labelStatSets.textContent = `เซ็ตใน${currentWeek.title}`;
     } else {
         const currentDay = (currentWeek.days || []).find(d => d.id === AppState.selectedDayId);
@@ -1148,6 +1151,7 @@ function renderScopeHeaders() {
         if (scopeLabel) scopeLabel.textContent = `🎯 ${text}`;
         if (muscleScopeSubtitle) muscleScopeSubtitle.textContent = `คำนวณเฉพาะรายการฝึกใน ${dayTitle}${dayDate}`;
         if (historyScopeSubtitle) historyScopeSubtitle.textContent = `แสดงประวัติเฉพาะ ${dayTitle}${dayDate}`;
+        if (tabScopeSubtitle) tabScopeSubtitle.textContent = `สถิติ & ประวัติเฉพาะ ${dayTitle}${dayDate}`;
         if (labelStatSets) labelStatSets.textContent = `เซ็ตใน${dayTitle}`;
     }
 }
@@ -1817,11 +1821,15 @@ function renderLogsHistory() {
     const container = document.getElementById('workout-logs-tbody') || document.getElementById('logs-history-tbody');
     const emptyState = document.getElementById('workout-logs-empty') || document.getElementById('logs-empty-state');
     const totalLogsBadge = document.getElementById('stat-total-logs');
+    const tabLogsBadge = document.getElementById('stat-total-logs-badge');
     if (!container) return;
 
     const logs = AppState.logs || [];
     if (totalLogsBadge) {
         totalLogsBadge.textContent = `${logs.length} รายการ`;
+    }
+    if (tabLogsBadge) {
+        tabLogsBadge.textContent = logs.length;
     }
 
     if (logs.length === 0) {
@@ -1864,6 +1872,33 @@ function renderLogsHistory() {
         `;
     }).join('');
 }
+
+window.switchBottomTab = function(tabName) {
+    const btnMuscles = document.getElementById('tab-btn-muscles');
+    const btnHistory = document.getElementById('tab-btn-history');
+    const contentMuscles = document.getElementById('tab-content-muscles');
+    const contentHistory = document.getElementById('tab-content-history');
+
+    if (tabName === 'history') {
+        if (btnMuscles) {
+            btnMuscles.className = 'px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+        }
+        if (btnHistory) {
+            btnHistory.className = 'px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 bg-sky-500 text-white shadow-lg shadow-sky-500/20 cursor-pointer';
+        }
+        if (contentMuscles) contentMuscles.classList.add('hidden');
+        if (contentHistory) contentHistory.classList.remove('hidden');
+    } else {
+        if (btnMuscles) {
+            btnMuscles.className = 'px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 bg-sky-500 text-white shadow-lg shadow-sky-500/20 cursor-pointer';
+        }
+        if (btnHistory) {
+            btnHistory.className = 'px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+        }
+        if (contentMuscles) contentMuscles.classList.remove('hidden');
+        if (contentHistory) contentHistory.classList.add('hidden');
+    }
+};
 
 window.deleteWorkoutLog = async function(logId) {
     if (confirm('คุณต้องการลบรายการฝึกนี้หรือไม่?')) {
